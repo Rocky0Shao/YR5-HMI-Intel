@@ -10,6 +10,7 @@ import math
 
 from proto_out import HMI_RX_CONTROLS_pb2 as hmi
 from ws_client import WSClient
+import asyncio
 
 def parse_xy_flat(data: Sequence[float]) -> List[Tuple[float, float]]:
     """Convert [x1,y1,x2,y2,...] -> [(x1,y1),(x2,y2),...]. Drops a trailing odd value."""
@@ -99,7 +100,10 @@ class MinimalSubscriber(Node):
             wp = nav.waypoints.add()
             wp.lat = float(lat)
             wp.lon = float(lon)
-
+    
+        # Skip if message would be empty
+        if nav.ByteSize() == 0:
+            return b""
         return nav.SerializeToString()
 
     def tx_nav(self):
@@ -113,7 +117,7 @@ class MinimalSubscriber(Node):
             #     f.write(payload)
 
             # Example B: send over a WebSocket to HMI (binary frame)
-            import asyncio, websockets
+
             asyncio.get_running_loop().create_task(self._ws_send(payload))
 
             # or publish on a ROS topic as bytes if you prefer (std_msgs/ByteMultiArray)
@@ -121,6 +125,15 @@ class MinimalSubscriber(Node):
 
         except Exception as e:
             self.get_logger().error(f'Failed to build/send Navigation proto: {e}')
+
+    # --- Cleanup ---
+
+    def destroy_node(self):
+        try:
+            self.ws.stop()
+        except Exception:
+            pass
+        super().destroy_node()
 
 def main(args=None):
     rclpy.init(args=args)
@@ -130,6 +143,7 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()
