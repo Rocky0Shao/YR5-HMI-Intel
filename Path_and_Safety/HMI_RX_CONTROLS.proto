@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+message Waypoint {
+    float lat = 1;
+    float lon = 2;
+}
+
+message Navigation {
+    float current_lat  = 1;
+    float current_lon  = 2;
+    float heading_deg  = 3;
+
+    repeated Waypoint waypoints = 4;   // may be empty OR partial OR full
+}
