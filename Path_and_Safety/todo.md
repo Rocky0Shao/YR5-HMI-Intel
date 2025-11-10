@@ -48,13 +48,15 @@ Acquired ROS bag from Controls team. Initially assumed a second ROS bag from Sen
 
 ## Summary
 Continued work on decoding the ROS bag from the Controls team to extract waypoints for path planning.  
-Initially thought manual conversion from car-relative to global coordinates (accounting for heading) was needed.  
-After discussing with the Controls team lead, confirmed that **global coordinate waypoints are already included** in the ROS bag.
+Initially assumed manual conversion from car-relative to global coordinates (accounting for heading) was required.  
+After clarification with the Controls team lead, confirmed that **global coordinate waypoints are already included** in the ROS bag.  
 
-The global coordinates are only a few centimeters apart, resulting in excessive waypoint density. To reduce redundancy, a downsampling pipeline was implemented to include only points that exceed a specified distance threshold from the previous waypoint. This ensures an optimized, evenly spaced set of waypoints for transmission and processing.
+Because consecutive global coordinates were only a few centimeters apart, the data was overly dense. A downsampling pipeline was implemented to retain only points separated by a specified distance threshold, producing an optimized and evenly spaced set of waypoints for transmission and visualization.  
+
+Successfully implemented and tested the downsampling pipeline, comparing filtered and unfiltered waypoints using a scatter plot for validation.  
 
 ## Progress
-- Decoded global waypoint data from 1D array into list format: `[[x1, y1], [x2, y2], ...]`
-- Downsample pipeline implemented
-- Designed output data structure for sending coordinates to a **protobuf message**
-- Researched how to **transmit data via WebSocket** to the HMI Jetson processor
+- Decoded global waypoint data from a flattened 1D array into coordinate pairs: `[(x1, y1), (x2, y2), ...]`
+- Implemented distance-based downsampling logic
+- Defined output structure for **protobuf message** packaging
+- Researched **WebSocket transmission** for integration with the HMI Jetson processor

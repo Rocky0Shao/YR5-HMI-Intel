@@ -2,10 +2,11 @@ import rclpy
 from rclpy.node import Node
 
 from std_msgs.msg import Float64MultiArray
+from novatel_gps_msgs.msg import Inspvax
+
 from typing import List, Tuple, Sequence
 
 import math
-import time
 
 def parse_xy_flat(data: Sequence[float]) -> List[Tuple[float, float]]:
     """Convert [x1,y1,x2,y2,...] -> [(x1,y1),(x2,y2),...]. Drops a trailing odd value."""
@@ -52,9 +53,15 @@ class MinimalSubscriber(Node):
     def __init__(self):
         super().__init__('minimal_subscriber')
 
-        # holders for latest points
-        self.raw_points_remain: List[Tuple[float, float]] = []
+        # Subscribe to raw points
         self.create_subscription(Float64MultiArray, '/raw_points_remain', self.cb_raw_points_remain, 10)
+
+        # Subscribe to inspvax (NovAtel GPS message)
+        self.create_subscription(Inspvax, '/inspvax', self.cb_inspvax, 10)
+
+        # Holders
+        self.latest_azimuth: float = float('nan')
+        self.raw_points_remain: List[Tuple[float, float]] = []
 
 
     def cb_raw_points_remain(self, msg: Float64MultiArray):
@@ -67,6 +74,11 @@ class MinimalSubscriber(Node):
             self.get_logger().info(f'/raw_points_remain: {len(filtered_pts)} points; first={filtered_pts[0]} \n')
         else:
             self.get_logger().info('/raw_points_remain: 0 points')
+            
+    def cb_inspvax(self, msg: Inspvax):
+        """Extract azimuth from /inspvax and store it."""
+        self.latest_azimuth = msg.azimuth
+        self.get_logger().info(f'/inspvax: azimuth = {self.latest_azimuth:.3f}°')
 
 def main(args=None):
     rclpy.init(args=args)
