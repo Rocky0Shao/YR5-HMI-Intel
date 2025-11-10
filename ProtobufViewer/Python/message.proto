@@ -1,0 +1,6 @@
+package perception;
+
+message Test {
+    required string message = 1;
+    required int32 id = 2;
+}
