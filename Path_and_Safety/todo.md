@@ -55,8 +55,14 @@ Because consecutive global coordinates were only a few centimeters apart, the da
 
 Successfully implemented and tested the downsampling pipeline, comparing filtered and unfiltered waypoints using a scatter plot for validation.  
 
+## Visualization
+
+A quick visualization video was created to show the CAR driving during ROS bag replay, using the downsampled waypoints.  
+🎥 [Watch on YouTube](https://youtu.be/T3FgTb362sk)
+
 ## Progress
 - Decoded global waypoint data from a flattened 1D array into coordinate pairs: `[(x1, y1), (x2, y2), ...]`
 - Implemented distance-based downsampling logic
+- Implemented Visual Feedback
 - Defined output structure for **protobuf message** packaging
 - Researched **WebSocket transmission** for integration with the HMI Jetson processor
