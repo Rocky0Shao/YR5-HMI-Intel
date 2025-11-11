@@ -66,3 +66,18 @@ A quick visualization video was created to show the CAR driving during ROS bag r
 - Implemented Visual Feedback
 - Defined output structure for **protobuf message** packaging
 - Researched **WebSocket transmission** for integration with the HMI Jetson processor
+
+
+
+# Daily Log — 11/11
+
+## Summary
+Set up the protobuf message structure and generated the corresponding compiler output from the defined `.proto` schema.  
+Researched TCP socket communication and verified the custom WebSocket client’s functionality through local testing.  
+Continued experiments on establishing reliable TCP communication between modules.
+
+## Progress
+- Defined protobuf structure  
+- Generated protobuf compiler output  
+- Implemented WebSocket client  
+- Performed socket communication tests

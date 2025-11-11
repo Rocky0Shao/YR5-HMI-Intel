@@ -10,7 +10,6 @@ import math
 
 from proto_out import HMI_RX_CONTROLS_pb2 as hmi
 from ws_client import WSClient
-import asyncio
 
 def parse_xy_flat(data: Sequence[float]) -> List[Tuple[float, float]]:
     """Convert [x1,y1,x2,y2,...] -> [(x1,y1),(x2,y2),...]. Drops a trailing odd value."""
@@ -71,7 +70,7 @@ class MinimalSubscriber(Node):
 
         # Start WS client
         uri = "ws://hmi-jetson.local:8765"   # set your server URI
-        self.ws = WSClient(uri, on_error=lambda m: self.get_logger().warn(m))
+        self.ws = WSClient(uri, on_error=lambda m: self.get_logger().warning(m))
         self.ws.start()
     
         # send at 5 Hz
