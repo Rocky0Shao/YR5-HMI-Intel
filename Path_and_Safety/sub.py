@@ -116,12 +116,6 @@ class MinimalSubscriber(Node):
             # with open('/tmp/nav.bin', 'wb') as f:
             #     f.write(payload)
 
-            # Example B: send over a WebSocket to HMI (binary frame)
-
-            asyncio.get_running_loop().create_task(self._ws_send(payload))
-
-            # or publish on a ROS topic as bytes if you prefer (std_msgs/ByteMultiArray)
-            # (define a publisher and publish payload)
 
         except Exception as e:
             self.get_logger().error(f'Failed to build/send Navigation proto: {e}')
