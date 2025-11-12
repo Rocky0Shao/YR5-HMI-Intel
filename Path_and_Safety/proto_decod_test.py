@@ -51,7 +51,7 @@ def handle_client(conn: socket.socket, addr):
 
 def main():
     host = "0.0.0.0"
-    port = 65432
+    port = 5001
     print(f"[listening] {host}:{port}")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
