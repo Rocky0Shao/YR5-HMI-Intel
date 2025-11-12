@@ -1,7 +1,6 @@
-#!/usr/bin/env python3
-import argparse, socket, struct
+import socket, struct
 from typing import Optional
-from proto_out import HMI_RX_CONTROLS_pb2 as hmi
+import HMI_RX_CONTROLS_pb2 as hmi
 
 def recv_exact(conn: socket.socket, n: int) -> Optional[bytes]:
     buf = bytearray()
@@ -16,14 +15,13 @@ def handle_client(conn: socket.socket, addr):
     print(f"[connected] {addr[0]}:{addr[1]}")
     try:
         while True:
-            # Read 4-byte length prefix
+            # Read 4-byte big-endian length prefix
             hdr = recv_exact(conn, 4)
             if hdr is None:
                 print("[disconnect]")
                 return
             (length,) = struct.unpack(">I", hdr)
             if length == 0:
-                # Skip empty frames
                 continue
 
             payload = recv_exact(conn, length)
@@ -34,16 +32,12 @@ def handle_client(conn: socket.socket, addr):
             nav = hmi.Navigation()
             nav.ParseFromString(payload)
 
-            # Pretty print
+            # Pretty print without HasField on proto3 scalars
             print("\n=== Navigation ===")
-            if nav.HasField("current_lat"):
-                print(f"lat: {nav.current_lat:.8f}")
-            if nav.HasField("current_lon"):
-                print(f"lon: {nav.current_lon:.8f}")
-            if nav.HasField("heading_deg"):
-                print(f"heading_deg: {nav.heading_deg:.2f}")
+            print(f"lat: {nav.current_lat:.8f}")
+            print(f"lon: {nav.current_lon:.8f}")
+            print(f"heading_deg: {nav.heading_deg:.2f}")
             print(f"waypoints: {len(nav.waypoints)}")
-            # Print first few waypoints
             for i, wp in enumerate(nav.waypoints[:5]):
                 print(f"  [{i}] lat={wp.lat:.8f}, lon={wp.lon:.8f}")
             if len(nav.waypoints) > 5:
@@ -56,16 +50,13 @@ def handle_client(conn: socket.socket, addr):
         conn.close()
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--host", default="0.0.0.0")
-    ap.add_argument("--port", type=int, default=65432)
-    args = ap.parse_args()
-
+    host = "0.0.0.0"
+    port = 65432
+    print(f"[listening] {host}:{port}")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind((args.host, args.port))
+        s.bind((host, port))
         s.listen(5)
-        print(f"[listening] {args.host}:{args.port}")
         while True:
             conn, addr = s.accept()
             handle_client(conn, addr)

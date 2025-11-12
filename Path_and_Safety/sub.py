@@ -4,12 +4,12 @@ from rclpy.node import Node
 from std_msgs.msg import Float64MultiArray
 from novatel_gps_msgs.msg import Inspvax
 
-from typing import List, Tuple, Sequence
+from typing import List, Tuple, Sequence, Optional
 
 import math
 import socket  
 import struct
-from proto_out import HMI_RX_CONTROLS_pb2 as hmi
+import HMI_RX_CONTROLS_pb2 as hmi
 
 def parse_xy_flat(data: Sequence[float]) -> List[Tuple[float, float]]:
     """Convert [x1,y1,x2,y2,...] -> [(x1,y1),(x2,y2),...]. Drops a trailing odd value."""
@@ -68,12 +68,12 @@ class MinimalSubscriber(Node):
         self.current_lon: float = float('nan')
         self.filtered_pts: List[Tuple[float, float]] = []
 
-        # --- Initialize TCP Socket here ---
+        # TCP params
         self.declare_parameter('tcp_host', '127.0.0.1')
         self.declare_parameter('tcp_port', 65432)
         self.tcp_host: str = self.get_parameter('tcp_host').value
         self.tcp_port: int = int(self.get_parameter('tcp_port').value)
-        self.sock: socket.socket | None = None
+        self.sock: Optional[socket.socket] = None
         self._connect_tcp()
 
         # send at 5 Hz
@@ -93,13 +93,12 @@ class MinimalSubscriber(Node):
             s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             s.settimeout(2.0)
             s.connect((self.tcp_host, self.tcp_port))
-            s.settimeout(0.5)  # short ops timeout
+            s.settimeout(0.5)
             self.sock = s
             self.get_logger().info(f'Connected TCP to {self.tcp_host}:{self.tcp_port}')
         except Exception as e:
             self.sock = None
-            self.get_logger().warn(f'TCP connect failed: {e}')
-
+            self.get_logger().warning(f'TCP connect failed: {e}')
 
     def cb_raw_points_remain(self, msg: Float64MultiArray):
         unfiltered_pts = parse_xy_flat(msg.data)               # [(lat, lon), ...]
@@ -135,18 +134,17 @@ class MinimalSubscriber(Node):
             if not payload:
                 return
 
-            # --- TODO 2 fixed: Send payload over TCP socket ---
             if self.sock is None:
                 self._connect_tcp()
             if self.sock is None:
                 return
 
+            # Send single length-prefixed frame
             frame = struct.pack(">I", len(payload)) + payload
             self.sock.sendall(frame)
-            self.sock.sendall(payload)
 
         except (socket.timeout, ConnectionRefusedError, ConnectionResetError, BrokenPipeError) as e:
-            self.get_logger().warn(f'TCP send failed, will retry: {e}')
+            self.get_logger().warning(f'TCP send failed, will retry: {e}')
             self._connect_tcp()
         except Exception as e:
             self.get_logger().error(f'Failed to build/send Navigation proto: {e}')
@@ -164,6 +162,7 @@ class MinimalSubscriber(Node):
             pass
         super().destroy_node()
 
+        
 def main(args=None):
     rclpy.init(args=args)
     node = MinimalSubscriber()
