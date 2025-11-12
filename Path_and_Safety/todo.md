@@ -72,12 +72,17 @@ A quick visualization video was created to show the CAR driving during ROS bag r
 # Daily Log — 11/11
 
 ## Summary
-Set up the protobuf message structure and generated the corresponding compiler output from the defined `.proto` schema.  
-Researched TCP socket communication and verified the custom WebSocket client’s functionality through local testing.  
-Continued experiments on establishing reliable TCP communication between modules.
+Set up the **protobuf message structure** and generated the compiled output from the defined `.proto` schema.  
+Researched **TCP socket communication** and verified the custom WebSocket client through local testing.  
+Experimented with establishing reliable TCP communication between modules in the system.  
+
+Successfully implemented a **TCP sender** inside the ROS node that transmits protobuf messages.  
+Built a **TCP receiver** that accepts these messages, decodes the protobuf data, and prints the results to the terminal in an organized format.
 
 ## Progress
-- Defined protobuf structure  
+- Defined and tested protobuf schema  
 - Generated protobuf compiler output  
-- Implemented WebSocket client  
-- Performed socket communication tests
+- Implemented WebSocket client for early communication tests  
+- Researched and tested TCP socket communication  
+- Added TCP sender to ROS node  
+- Created and verified TCP receiver that decodes and displays protobuf messages  
