@@ -7,7 +7,7 @@ from novatel_gps_msgs.msg import Inspvax
 from typing import List, Tuple, Sequence
 
 import math
-import socket  
+import socket  # <-- TCP
 from proto_out import HMI_RX_CONTROLS_pb2 as hmi
 
 def parse_xy_flat(data: Sequence[float]) -> List[Tuple[float, float]]:
@@ -67,7 +67,7 @@ class MinimalSubscriber(Node):
         self.current_lon: float = float('nan')
         self.filtered_pts: List[Tuple[float, float]] = []
 
-        # --- Initialize TCP Socket here ---
+        # --- TODO 1 fixed: Initialize TCP Socket here ---
         self.declare_parameter('tcp_host', '127.0.0.1')
         self.declare_parameter('tcp_port', 65432)
         self.tcp_host: str = self.get_parameter('tcp_host').value
@@ -99,12 +99,11 @@ class MinimalSubscriber(Node):
             self.sock = None
             self.get_logger().warn(f'TCP connect failed: {e}')
 
-
     def cb_raw_points_remain(self, msg: Float64MultiArray):
         unfiltered_pts = parse_xy_flat(msg.data)               # [(lat, lon), ...]
         self.filtered_pts = parse_xy_pairs(unfiltered_pts, 1.0)
         self.get_logger().info(f'/raw_points_remain: {len(self.filtered_pts)} points')
-            
+
     def cb_inspvax(self, msg: Inspvax):
         # NovAtel Inspvax typically provides latitude, longitude, azimuth (deg)
         self.current_lat = float(msg.latitude)
@@ -122,7 +121,7 @@ class MinimalSubscriber(Node):
             wp = nav.waypoints.add()
             wp.lat = float(lat)
             wp.lon = float(lon)
-    
+
         # Skip if message would be empty
         if nav.ByteSize() == 0:
             return b""
@@ -170,7 +169,6 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
-
 
 if __name__ == '__main__':
     main()
