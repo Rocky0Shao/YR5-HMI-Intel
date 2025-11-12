@@ -8,6 +8,7 @@ from typing import List, Tuple, Sequence
 
 import math
 import socket  
+import struct
 from proto_out import HMI_RX_CONTROLS_pb2 as hmi
 
 def parse_xy_flat(data: Sequence[float]) -> List[Tuple[float, float]]:
@@ -140,7 +141,8 @@ class MinimalSubscriber(Node):
             if self.sock is None:
                 return
 
-            # Raw send. If your server expects length-prefix, add it here.
+            frame = struct.pack(">I", len(payload)) + payload
+            self.sock.sendall(frame)
             self.sock.sendall(payload)
 
         except (socket.timeout, ConnectionRefusedError, ConnectionResetError, BrokenPipeError) as e:
