@@ -86,3 +86,15 @@ Built a **TCP receiver** that accepts these messages, decodes the protobuf data,
 - Researched and tested TCP socket communication  
 - Added TCP sender to ROS node  
 - Created and verified TCP receiver that decodes and displays protobuf messages  
+
+
+
+# Daily Log — 11/13
+
+## Summary
+
+More tasks to do
+- Send Target Destination to Controls (Ros Topic String, Char for destination)
+- Send Engage/Disengage to Safety (Ros Topic boolean, )
+## Progress
+- 
