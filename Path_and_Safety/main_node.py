@@ -69,8 +69,8 @@ class MinimalSubscriber(Node):
         self.filtered_pts: List[Tuple[float, float]] = []
 
         # TCP params
-        self.declare_parameter('tcp_host', '10.8.0.16')
-        self.declare_parameter('tcp_port', 5001)
+        self.declare_parameter('tcp_host', '127.0.0.1')
+        self.declare_parameter('tcp_port', 65432)
         self.tcp_host: str = self.get_parameter('tcp_host').value
         self.tcp_port: int = int(self.get_parameter('tcp_port').value)
         self.sock: Optional[socket.socket] = None
