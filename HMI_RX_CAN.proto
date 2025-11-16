@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+message AVLight {
+    int32 Rolling_Count = 1;
+    int32 AVLightStatus = 2;
+    int32 AVLightColor = 3;
+}
+message AVState {
+    int32 Rolling_Count = 1;
+    int32 GlobalAutonomyStatus = 2;
+    int32 SteeringCtrlActive = 3;
+    int32 FrictionBrakeCtrlActive = 4;
+    int32 PropulsionCtrlActive = 5;
+}
+
+
+/**BO_ 16 AVLight: 1 Vector__XXX
+ * SG_ Rolling_Count : 7|2@0+ (1,0) [0|3] "" DAQ_SC,BlueLight_SC
+ * SG_ AVLightStatus : 5|2@0+ (1,0) [0|3] "" DAQ_SC,BlueLight_SC
+ * SG_ AVLightColor : 3|3@0+ (1,0) [0|5] "" Vector__XXX
+
+ *BO_ 17 AVState: 1 Vector__XXX
+ * SG_ Rolling_Count : 7|2@0+ (1,0) [0|3] "" DAQ_SC,BlueLight_SC
+ * SG_ GlobalAutonomyStatus : 5|2@0+ (1,0) [0|2] "" DAQ_SC,BlueLight_SC
+ * SG_ SteeringCtrlActive : 3|1@0+ (1,0) [0|1] "" DAQ_SC
+ * SG_ FrictionBrakeCtrlActive : 2|1@0+ (1,0) [0|1] "" DAQ_SC
+ * SG_ PropulsionCtrlActive : 1|1@0+ (1,0) [0|1] "" DAQ_SC
+ */
