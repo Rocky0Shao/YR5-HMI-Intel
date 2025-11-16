@@ -1,0 +1,6 @@
+syntax = "proto3";
+
+message HMITxMessage {
+    int32 engage_status = 1;        // Engage command: 0 = DISENGAGE, 1 = ENGAGE, 2 = DISABLED
+    string target_destination = 2;  // Destination: one capital letter A–Z (example: "A", "B", "C")
+}
