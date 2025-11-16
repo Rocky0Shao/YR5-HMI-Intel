@@ -97,4 +97,14 @@ More tasks to do
 - Send Target Destination to Controls (Ros Topic String, Char for destination)
 - Send Engage/Disengage to Safety (Ros Topic boolean, )
 ## Progress
+- Set up ROS publishers
+- Set up protobuf decoder in main node
+
+
+# Daily Log — 11/16
+I have to create test script (fake hmi tx request) that sends protobuf via websocket to Main_node. The main node will decode protobuf and publish it via ROS topics. 
+
+
+## Summary
 - 
+## Progress

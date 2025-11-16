@@ -3,6 +3,7 @@ from rclpy.node import Node
 
 from std_msgs.msg import Float64MultiArray
 from novatel_gps_msgs.msg import Inspvax
+from std_msgs.msg import String, Int32  # NEW
 
 from typing import List, Tuple, Sequence, Optional
 
@@ -62,11 +63,29 @@ class MinimalSubscriber(Node):
         # Subscribe to inspvax (NovAtel GPS message)
         self.create_subscription(Inspvax, '/inspvax', self.cb_inspvax, 10)
 
+        # Publishers
+        # Send Target Destination to Controls (ROS Topic String)
+        self.dest_pub = self.create_publisher(
+            String,
+            '/controls/target_destination',
+            10
+        )
+        # Send Engage/Disengage/Disabled to Safety (ROS Topic int: 0,1,3)
+        self.engage_pub = self.create_publisher(
+            Int32,
+            '/safety/engage_state',
+            10
+        )
+
         # Holders
         self.latest_azimuth: float = float('nan')
         self.current_lat: float = float('nan')
         self.current_lon: float = float('nan')
         self.filtered_pts: List[Tuple[float, float]] = []
+
+        # State for HMI topics
+        self.current_destination: str = ""   # set this from your HMI input
+        self.current_engage_state: int = 0   # 0=disengage, 1=engage, 3=disabled
 
         # TCP params
         self.declare_parameter('tcp_host', '127.0.0.1')
@@ -127,6 +146,20 @@ class MinimalSubscriber(Node):
         if nav.ByteSize() == 0:
             return b""
         return nav.SerializeToString()
+
+
+    def publish_destination(self) -> None:
+        """Publish current destination string to Controls."""
+        if self.current_destination:
+            msg = String()
+            msg.data = self.current_destination
+            self.dest_pub.publish(msg)
+
+    def publish_engage_state(self) -> None:
+        """Publish current engage state int to Safety."""
+        msg = Int32()
+        msg.data = int(self.current_engage_state)
+        self.engage_pub.publish(msg)
 
     def tx_nav(self):
         try:

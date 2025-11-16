@@ -19,24 +19,31 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\x15HMI_TX_CONTROLS.proto\"\x1f\n\rEngageRequest\x12\x0e\n\x06\x65ngage\x18\x01 \x01(\x05\x62\x06proto3'
+  serialized_pb=b'\n\x15HMI_TX_CONTROLS.proto\"A\n\x0cHMITxMessage\x12\x15\n\rengage_status\x18\x01 \x01(\x05\x12\x1a\n\x12target_destination\x18\x02 \x01(\tb\x06proto3'
 )
 
 
 
 
-_ENGAGEREQUEST = _descriptor.Descriptor(
-  name='EngageRequest',
-  full_name='EngageRequest',
+_HMITXMESSAGE = _descriptor.Descriptor(
+  name='HMITxMessage',
+  full_name='HMITxMessage',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='engage', full_name='EngageRequest.engage', index=0,
+      name='engage_status', full_name='HMITxMessage.engage_status', index=0,
       number=1, type=5, cpp_type=1, label=1,
       has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='target_destination', full_name='HMITxMessage.target_destination', index=1,
+      number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
@@ -53,18 +60,18 @@ _ENGAGEREQUEST = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=25,
-  serialized_end=56,
+  serialized_end=90,
 )
 
-DESCRIPTOR.message_types_by_name['EngageRequest'] = _ENGAGEREQUEST
+DESCRIPTOR.message_types_by_name['HMITxMessage'] = _HMITXMESSAGE
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
-EngageRequest = _reflection.GeneratedProtocolMessageType('EngageRequest', (_message.Message,), {
-  'DESCRIPTOR' : _ENGAGEREQUEST,
+HMITxMessage = _reflection.GeneratedProtocolMessageType('HMITxMessage', (_message.Message,), {
+  'DESCRIPTOR' : _HMITXMESSAGE,
   '__module__' : 'HMI_TX_CONTROLS_pb2'
-  # @@protoc_insertion_point(class_scope:EngageRequest)
+  # @@protoc_insertion_point(class_scope:HMITxMessage)
   })
-_sym_db.RegisterMessage(EngageRequest)
+_sym_db.RegisterMessage(HMITxMessage)
 
 
 # @@protoc_insertion_point(module_scope)
