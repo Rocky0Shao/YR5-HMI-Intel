@@ -33,49 +33,7 @@ def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 def parse_xy_pairs(data: List[Tuple[float, float]], threshold: float) -> List[Tuple[float, float]]:
     """
-    Downsample successive (lat, lon) points by distance.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
+    Downsample successive (lat, lon) points by distance.   
     Keeps the first point, then keeps a point only if distance from last kept >= threshold meters.
     """
     if not data:
