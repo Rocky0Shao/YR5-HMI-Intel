@@ -92,19 +92,31 @@ Built a **TCP receiver** that accepts these messages, decodes the protobuf data,
 # Daily Log — 11/13
 
 ## Summary
+More tasks to do  
+- Send Target Destination to Controls (Ros Topic String, Char for destination)  
+- Send Engage/Disengage to Safety (Ros Topic boolean)
 
-More tasks to do
-- Send Target Destination to Controls (Ros Topic String, Char for destination)
-- Send Engage/Disengage to Safety (Ros Topic boolean, )
 ## Progress
-- Set up ROS publishers
-- Set up protobuf decoder in main node
+- Set up ROS publishers  
+- Set up protobuf decoder in main node  
 
 
 # Daily Log — 11/16
-I have to create test script (fake hmi tx request) that sends protobuf via websocket to Main_node. The main node will decode protobuf and publish it via ROS topics. 
-
 
 ## Summary
-- 
+Need a test script (fake HMI TX request) that sends protobuf via WebSocket to the Main Node so I can verify the decoding + ROS publishing flow.
+
 ## Progress
+- Planned structure for the mock sender  
+- Identified message types and framing requirements  
+
+
+# Daily Log — 11/20
+
+## Summary
+Added full RX support so the main node can receive `HMITxMessage` from the HMI backend over TCP and convert those commands into ROS topics.
+
+## Progress
+- Added RX socket connection and periodic polling timer  
+- Implemented protobuf parsing for engage status + destination  
+- Published decoded values to `/safety/engage_state` and `/controls/target_destination`

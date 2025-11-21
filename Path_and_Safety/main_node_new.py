@@ -1,17 +1,18 @@
+import math
+import socket
+import struct
+from typing import List, Tuple, Sequence, Optional
+
 import rclpy
 from rclpy.node import Node
 
 from std_msgs.msg import Float64MultiArray
 from novatel_gps_msgs.msg import Inspvax
-from std_msgs.msg import String, Int32  # NEW
+from std_msgs.msg import String, Int32
 
-from typing import List, Tuple, Sequence, Optional
+import HMI_RX_CONTROLS_pb2 as hmi_rx   # ROS → HMI: Navigation, etc.
+import HMI_TX_CONTROLS_pb2 as hmi_tx   # HMI → ROS: HMITxMessage
 
-import math
-import socket  
-import struct
-import HMI_RX_CONTROLS_pb2 as hmi_rx
-import HMI_TX_CONTROLS_pb2 as hmi_tx
 
 def parse_xy_flat(data: Sequence[float]) -> List[Tuple[float, float]]:
     """Convert [x1,y1,x2,y2,...] -> [(x1,y1),(x2,y2),...]. Drops a trailing odd value."""
@@ -22,60 +23,20 @@ def parse_xy_flat(data: Sequence[float]) -> List[Tuple[float, float]]:
     ys = data[1:n:2]
     return list(zip(xs, ys))
 
+
 def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Great-circle distance in meters. Inputs in degrees."""
     R = 6371000.0
     φ1, λ1, φ2, λ2 = map(math.radians, (lat1, lon1, lat2, lon2))
     dφ = φ2 - φ1
     dλ = λ2 - λ1
-    a = math.sin(dφ/2)**2 + math.cos(φ1) * math.cos(φ2) * math.sin(dλ/2)**2
+    a = math.sin(dφ / 2) ** 2 + math.cos(φ1) * math.cos(φ2) * math.sin(dλ / 2) ** 2
     return 2 * R * math.asin(math.sqrt(a))
+
 
 def parse_xy_pairs(data: List[Tuple[float, float]], threshold: float) -> List[Tuple[float, float]]:
     """
     Downsample successive (lat, lon) points by distance.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
     Keeps the first point, then keeps a point only if distance from last kept >= threshold meters.
     """
     if not data:
@@ -96,9 +57,12 @@ def parse_xy_pairs(data: List[Tuple[float, float]], threshold: float) -> List[Tu
 
     return out
 
+
 class MinimalSubscriber(Node):
     def __init__(self):
         super().__init__('minimal_subscriber')
+
+        # --- ROS subscriptions ---
 
         # Subscribe to raw points
         self.create_subscription(Float64MultiArray,
@@ -112,14 +76,15 @@ class MinimalSubscriber(Node):
                                  self.cb_inspvax,
                                  10)
 
+        # --- ROS publishers ---
 
-        # Publishers
         # Send Target Destination to Controls (ROS Topic String)
         self.dest_pub = self.create_publisher(
             String,
             '/controls/target_destination',
             10
         )
+
         # Send Engage/Disengage/Disabled to Safety (ROS Topic int: 0,1,3)
         self.engage_pub = self.create_publisher(
             Int32,
@@ -127,16 +92,16 @@ class MinimalSubscriber(Node):
             10
         )
 
-        # Holders
+        # --- State holders ---
+
         self.latest_azimuth: float = float('nan')
         self.current_lat: float = float('nan')
         self.current_lon: float = float('nan')
         self.filtered_pts: List[Tuple[float, float]] = []
 
         # State for HMI topics
-        self.current_destination: str = ""   # set this from your HMI input
+        self.current_destination: str = ""   # from HMI
         self.current_engage_state: int = 0   # 0=disengage, 1=engage, 3=disabled
-
 
         # --- TCP: TX (ROS → HMI, Navigation protobuf) ---
 
@@ -157,13 +122,15 @@ class MinimalSubscriber(Node):
         self.hmi_rx_sock: Optional[socket.socket] = None
         self.hmi_rx_buf: bytes = b''
 
-
         # Timers
         # TX Navigation at 5 Hz
         self.tx_timer = self.create_timer(0.2, self.tx_nav)
         # RX Commands poll at 20 Hz
         self.rx_timer = self.create_timer(0.05, self.rx_step)
 
+    # ----------------------------------------------------------------------
+    # HMI TX: ROS → HMI (Navigation)
+    # ----------------------------------------------------------------------
 
     def _connect_hmi_tx(self) -> None:
         """(Re)connect HMI TX socket (ROS → HMI backend)."""
@@ -227,7 +194,6 @@ class MinimalSubscriber(Node):
             self._connect_hmi_tx()
         except Exception as e:
             self.get_logger().error(f'Failed to build/send Navigation proto: {e}')
-
 
     # ----------------------------------------------------------------------
     # HMI RX: HMI → ROS (HMITxMessage command protobuf)
@@ -336,12 +302,13 @@ class MinimalSubscriber(Node):
     # ----------------------------------------------------------------------
     # ROS callbacks
     # ----------------------------------------------------------------------
-    def cb_raw_points_remain(self, msg: Float64MultiArray):
+
+    def cb_raw_points_remain(self, msg: Float64MultiArray) -> None:
         unfiltered_pts = parse_xy_flat(msg.data)               # [(lat, lon), ...]
         self.filtered_pts = parse_xy_pairs(unfiltered_pts, 1.0)
         self.get_logger().info(f'/raw_points_remain: {len(self.filtered_pts)} points')
-            
-    def cb_inspvax(self, msg: Inspvax):
+
+    def cb_inspvax(self, msg: Inspvax) -> None:
         # NovAtel Inspvax typically provides latitude, longitude, azimuth (deg)
         self.current_lat = float(msg.latitude)
         self.current_lon = float(msg.longitude)
@@ -353,10 +320,11 @@ class MinimalSubscriber(Node):
 
     def publish_destination(self) -> None:
         """Publish current destination string to Controls."""
-        if self.current_destination:
-            msg = String()
-            msg.data = self.current_destination
-            self.dest_pub.publish(msg)
+        if not self.current_destination:
+            return
+        msg = String()
+        msg.data = self.current_destination
+        self.dest_pub.publish(msg)
 
     def publish_engage_state(self) -> None:
         """Publish current engage state int to Safety."""
@@ -364,9 +332,9 @@ class MinimalSubscriber(Node):
         msg.data = int(self.current_engage_state)
         self.engage_pub.publish(msg)
 
-
-
-    # --- Cleanup ---
+    # ----------------------------------------------------------------------
+    # Cleanup
+    # ----------------------------------------------------------------------
 
     def destroy_node(self):
         try:
@@ -392,7 +360,6 @@ class MinimalSubscriber(Node):
         super().destroy_node()
 
 
-        
 def main(args=None):
     rclpy.init(args=args)
     node = MinimalSubscriber()
