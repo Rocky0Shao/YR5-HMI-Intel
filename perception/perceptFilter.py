@@ -22,6 +22,8 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
 	cantools = None  # type: ignore
 
+import percept_sender
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -169,7 +171,12 @@ class PerceptionFilter:
 		"TrafficSign_TrackA",  # Sign type 1/2 indicates speed limits.
 	}
 
-	def __init__(self, dbc_path: Optional[Path] = None) -> None:
+	def __init__(
+		self,
+		dbc_path: Optional[Path] = None,
+		sink_host: Optional[str] = None,
+		sink_port: Optional[int] = None,
+	) -> None:
 		if dbc_path is None:
 			dbc_path = Path(__file__).with_name("ADC2_SC_2024.2.dbc")
 		if not dbc_path.exists():
@@ -183,6 +190,14 @@ class PerceptionFilter:
 			except Exception as exc:  # pragma: no cover - defensive
 				LOGGER.warning("cantools decoding disabled: %s", exc)
 				self._cantools_db = None
+		self.sink_host = sink_host or percept_sender.DEFAULT_HOST
+		self.sink_port = sink_port or percept_sender.DEFAULT_PORT
+		self.sender = percept_sender.PerceptStreamSender(
+			host=self.sink_host,
+			port=self.sink_port,
+		)
+		self._min_transmit_interval = 0.2  # seconds (5 Hz)
+		self._last_transmit_time = 0.0
 
 	def filter_message(self, raw_frame: str) -> Optional[FilterOutcome]:
 		"""Return a FilterOutcome when the frame matches the perception filters."""
@@ -268,6 +283,22 @@ class PerceptionFilter:
 		except ValueError as exc:
 			raise ValueError(f"Invalid hex payload: {payload!r}") from exc
 
+	def close(self) -> None:
+		if hasattr(self, "sender") and self.sender is not None:
+			self.sender.close()
+
+	def _enforce_rate_limit(self) -> None:
+		"""Ensure transmissions do not exceed the 5 Hz requirement."""
+
+		if self._min_transmit_interval <= 0:
+			return
+		now = time.monotonic()
+		elapsed = now - self._last_transmit_time
+		if elapsed < self._min_transmit_interval:
+			time.sleep(self._min_transmit_interval - elapsed)
+			now = time.monotonic()
+		self._last_transmit_time = now
+
 	def _decode_frame(self, frame: CANFrame, message_def: DBCMessage) -> Optional[Dict[str, Any]]:
 		"""Attempt to decode the CAN frame using cantools, if available."""
 
@@ -285,18 +316,32 @@ class PerceptionFilter:
 			return None
 
 	def _transmit_stub(self, outcome: FilterOutcome) -> None:
-		"""Placeholder for the outbound publishing logic."""
+		"""Serialize and forward the frame via the TCP sender."""
 
-		# TODO: Replace this logging call with integration to the downstream service.
-		LOGGER.info(
-			"Forwarding %s CAN frame 0x%03X (%s) with %d bytes",
-			outcome.category,
-			outcome.frame.identifier,
-			outcome.message.name,
-			outcome.frame.dlc,
-		)
-		if outcome.decoded:
-			LOGGER.debug("Decoded payload: %s", outcome.decoded)
+		self._enforce_rate_limit()
+		payload_decoded = outcome.decoded or {}
+		try:
+			self.sender.send_percept(
+				category=outcome.category,
+				message_name=outcome.message.name,
+				can_id=outcome.frame.identifier,
+				dlc=outcome.frame.dlc,
+				raw_data=outcome.frame.data,
+				decoded_signals=payload_decoded,
+			)
+		except percept_sender.PerceptSenderError as exc:
+			LOGGER.error("Failed to send percept message: %s", exc)
+		else:
+			LOGGER.info(
+				"Forwarded %s CAN frame 0x%03X (%s) to %s:%d",
+				outcome.category,
+				outcome.frame.identifier,
+				outcome.message.name,
+				self.sink_host,
+				self.sink_port,
+			)
+			if outcome.decoded:
+				LOGGER.debug("Decoded payload: %s", outcome.decoded)
 
 
 def _frame_string_from_stream_line(raw_line: str) -> Optional[str]:
@@ -385,6 +430,17 @@ def _build_argument_parser() -> argparse.ArgumentParser:
 		help="Continue watching the stream file for newly appended messages.",
 	)
 	parser.add_argument(
+		"--sink-host",
+		default=percept_sender.DEFAULT_HOST,
+		help="Destination TCP host for serialized percept messages.",
+	)
+	parser.add_argument(
+		"--sink-port",
+		type=int,
+		default=percept_sender.DEFAULT_PORT,
+		help="Destination TCP port for serialized percept messages.",
+	)
+	parser.add_argument(
 		"--verbose",
 		action="store_true",
 		help="Emit debug output while parsing and validating frames.",
@@ -401,20 +457,27 @@ def main() -> None:
 		format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 	)
 
-	filter_ = PerceptionFilter(dbc_path=args.dbc)
+	filter_ = PerceptionFilter(
+		dbc_path=args.dbc,
+		sink_host=args.sink_host,
+		sink_port=args.sink_port,
+	)
 
 	if args.stream is None and args.frame is None:
 		parser.error("either a raw CAN frame or --stream must be provided")
 
-	if args.stream is not None:
-		_process_stream(filter_, stream_path=args.stream, follow=args.follow)
-	elif args.frame is not None:
-		outcome = filter_.filter_message(args.frame)
-		if outcome:
-			print("MATCH: perception-relevant CAN frame")
-			_print_decoded(outcome)
-		else:
-			print("NO MATCH: frame ignored")
+	try:
+		if args.stream is not None:
+			_process_stream(filter_, stream_path=args.stream, follow=args.follow)
+		elif args.frame is not None:
+			outcome = filter_.filter_message(args.frame)
+			if outcome:
+				print("MATCH: perception-relevant CAN frame")
+				_print_decoded(outcome)
+			else:
+				print("NO MATCH: frame ignored")
+	finally:
+		filter_.close()
 
 
 if __name__ == "__main__":

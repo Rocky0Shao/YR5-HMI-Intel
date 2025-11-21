@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package perception;
+
+message SignalValue {
+  string name = 1;
+  string value = 2;
+}
+
+message PerceptMessage {
+  string category = 1;
+  string message_name = 2;
+  uint32 can_id = 3;
+  uint32 dlc = 4;
+  bytes raw_data = 5;
+  repeated SignalValue decoded_signals = 6;
+  string timestamp_iso8601 = 7;
+}
