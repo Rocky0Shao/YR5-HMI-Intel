@@ -120,3 +120,15 @@ Added full RX support so the main node can receive `HMITxMessage` from the HMI b
 - Added RX socket connection and periodic polling timer  
 - Implemented protobuf parsing for engage status + destination  
 - Published decoded values to `/safety/engage_state` and `/controls/target_destination`
+
+
+# Daily Log — 11/23
+
+## Summary
+hmi_rx is me sending to hmi
+hmi_tx is me recieving from hmi
+
+## Progress
+- Made hmi2intel node with keyboard input
+- display engage status & destination via terminal output
+

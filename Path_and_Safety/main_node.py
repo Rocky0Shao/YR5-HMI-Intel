@@ -108,8 +108,8 @@ class MinimalSubscriber(Node):
 
         # --- TCP: RX (HMI → ROS, HMITxMessage commands) ---
 
-        self.declare_parameter('hmi_rx_host', '127.0.0.1')
-        self.declare_parameter('hmi_rx_port', 5001)    # Commands in
+        self.declare_parameter('hmi_rx_host', '127.0.0.2')
+        self.declare_parameter('hmi_rx_port', 65431)    # Commands in
         self.hmi_rx_host: str = self.get_parameter('hmi_rx_host').value
         self.hmi_rx_port: int = int(self.get_parameter('hmi_rx_port').value)
         self.hmi_rx_sock: Optional[socket.socket] = None
@@ -212,7 +212,7 @@ class MinimalSubscriber(Node):
             self.hmi_rx_sock = None
             self.get_logger().warning(f'HMI RX TCP connect failed: {e}')
 
-    def _handle_hmi_command(self, cmd: hmi_tx.HMITxMessage) -> None:
+    def _handle_hmi_command(self, cmd) -> None: #cmd: hmi_tx.HMITxMessage
         """
         Update internal state from HMITxMessage and publish to ROS topics.
 
@@ -233,6 +233,9 @@ class MinimalSubscriber(Node):
         # Publish to ROS
         self.publish_engage_state()
         self.publish_destination()
+        self.get_logger().info(
+            f"HMI command -> engage_state={self.current_engage_state}, destination='{self.current_destination or '(empty)'}'"
+        )
 
     def rx_step(self) -> None:
         """
