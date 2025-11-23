@@ -13,6 +13,13 @@ message AVState {
     int32 PropulsionCtrlActive = 5;
 }
 
+message MessageWrapper {
+    oneof messages {
+        AVState av_state = 1;
+        AVLight av_light = 2;
+    }
+}
+
 
 /**BO_ 16 AVLight: 1 Vector__XXX
  * SG_ Rolling_Count : 7|2@0+ (1,0) [0|3] "" DAQ_SC,BlueLight_SC
