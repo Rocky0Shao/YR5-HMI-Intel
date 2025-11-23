@@ -1,4 +1,4 @@
-import can_pb2
+import HMI_RX_CAN_pb2 as can_pb2
 import sys
 
 import socket
@@ -13,12 +13,12 @@ port = 5002
 
 
 def build_av_light_message(rolling_count, av_light_status, av_light_color):
-    #building a message (with test vals)
+    #building a message and serialize it
     av_light = can_pb2.AVLight()
     av_light.Rolling_Count = rolling_count
     av_light.AVLightStatus = av_light_status
     av_light.AVLightColor = av_light_color
-    return av_light.SerializeToString()
+    return av_light
 
 
 def build_av_state_message(rolling_count, global_autonomy_status, steering_ctrl_active, friction_brake_ctrl_active, propulsion_ctrl_active):
@@ -28,7 +28,25 @@ def build_av_state_message(rolling_count, global_autonomy_status, steering_ctrl_
     av_state.SteeringCtrlActive = steering_ctrl_active
     av_state.FrictionBrakeCtrlActive = friction_brake_ctrl_active
     av_state.PropulsionCtrlActive = propulsion_ctrl_active
-    return av_state.SerializeToString()
+
+
+
+
+    return av_state
+
+def build_message_wrapper(type_str, msg):
+
+    message_wrapper = can_pb2.MessageWrapper()
+
+    if type_str == "av_light":
+        message_wrapper.av_light.CopyFrom(msg)
+        
+        
+    elif type_str == "av_state":
+        message_wrapper.av_state.CopyFrom(msg)
+
+
+    return message_wrapper.SerializeToString()
 
 try: 
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -42,6 +60,7 @@ except socket.error as err:
 
 #send messages to socket
 def send_payload(payload):
+
     frame = struct.pack(">I", len(payload)) + payload
     s.sendall(frame)
 
