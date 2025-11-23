@@ -13,7 +13,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10HMI_RX_CAN.proto\"M\n\x07\x41VLight\x12\x15\n\rRolling_Count\x18\x01 \x01(\x05\x12\x15\n\rAVLightStatus\x18\x02 \x01(\x05\x12\x14\n\x0c\x41VLightColor\x18\x03 \x01(\x05\"\x99\x01\n\x07\x41VState\x12\x15\n\rRolling_Count\x18\x01 \x01(\x05\x12\x1c\n\x14GlobalAutonomyStatus\x18\x02 \x01(\x05\x12\x1a\n\x12SteeringCtrlActive\x18\x03 \x01(\x05\x12\x1f\n\x17\x46rictionBrakeCtrlActive\x18\x04 \x01(\x05\x12\x1c\n\x14PropulsionCtrlActive\x18\x05 \x01(\x05\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10HMI_RX_CAN.proto\"M\n\x07\x41VLight\x12\x15\n\rRolling_Count\x18\x01 \x01(\x05\x12\x15\n\rAVLightStatus\x18\x02 \x01(\x05\x12\x14\n\x0c\x41VLightColor\x18\x03 \x01(\x05\"\x99\x01\n\x07\x41VState\x12\x15\n\rRolling_Count\x18\x01 \x01(\x05\x12\x1c\n\x14GlobalAutonomyStatus\x18\x02 \x01(\x05\x12\x1a\n\x12SteeringCtrlActive\x18\x03 \x01(\x05\x12\x1f\n\x17\x46rictionBrakeCtrlActive\x18\x04 \x01(\x05\x12\x1c\n\x14PropulsionCtrlActive\x18\x05 \x01(\x05\"X\n\x0eMessageWrapper\x12\x1c\n\x08\x61v_state\x18\x01 \x01(\x0b\x32\x08.AVStateH\x00\x12\x1c\n\x08\x61v_light\x18\x02 \x01(\x0b\x32\x08.AVLightH\x00\x42\n\n\x08messagesb\x06proto3')
 
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'HMI_RX_CAN_pb2', globals())
@@ -24,4 +24,6 @@ if _descriptor._USE_C_DESCRIPTORS == False:
   _AVLIGHT._serialized_end=97
   _AVSTATE._serialized_start=100
   _AVSTATE._serialized_end=253
+  _MESSAGEWRAPPER._serialized_start=255
+  _MESSAGEWRAPPER._serialized_end=343
 # @@protoc_insertion_point(module_scope)
