@@ -36,18 +36,22 @@ for msg in bus:
     print("raw data: ", msg.data)
     print("decoded data: ", scoring_db.decode_message(msg.arbitration_id, msg.data, decode_choices=False))
 
+
     if msg.arbitration_id == gas_message.frame_id:
         print("Gas message detected")
         d = scoring_db.decode_message(msg.arbitration_id, msg.data, decode_choices=False) #decoded av state
-        serialized_av_state = send_can_protobuf.build_av_state_message(d['Rolling_Count'], d['GlobalAutonomyStatus'], d['SteeringCtrlActive'], d['FrictionBrakeCtrlActive'], d['PropulsionCtrlActive'])
-        send_can_protobuf.send_payload(serialized_av_state)
+        av_state = send_can_protobuf.build_av_state_message(d['Rolling_Count'], d['GlobalAutonomyStatus'], d['SteeringCtrlActive'], d['FrictionBrakeCtrlActive'], d['PropulsionCtrlActive'])
+        #send_can_protobuf.send_payload(send_can_protobuf.build_message_wrapper("av_state", av_state))
+        #for now send dummy message, uncomemnt above
+        send_can_protobuf.send_payload(send_can_protobuf.build_av_light_message(2, 1, 1))
 
     if msg.arbitration_id == bl_message.frame_id:
         print("BL message detected")
         d = scoring_db.decode_message(msg.arbitration_id, msg.data, decode_choices=False) #decoded av light
-        serialized_av_light = send_can_protobuf.build_av_light_message(d['Rolling_Count'], d['AVLightStatus'], d['AVLightColor'])
-        send_can_protobuf.send_payload(serialized_av_light)
-
+        av_light = send_can_protobuf.build_av_light_message(d['Rolling_Count'], d['AVLightStatus'], d['AVLightColor'])
+        #send_can_protobuf.send_payload(send_can_protobuf.build_message_wrapper("av_light", av_light))
+        #for now send dummy message, uncomment above
+        send_can_protobuf.send_payload(av_light)
 
 def initiate_connection():
     """
