@@ -1,0 +1,22 @@
+Metadata-Version: 2.4
+Name: urdfdom_py
+Version: 1.2.1
+Summary: Python implementation of the URDF parser.
+Maintainer: Chris Lalancette
+Maintainer-email: clalancette@openrobotics.org
+License: BSD
+Keywords: ROS2
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Programming Language :: Python
+Classifier: Topic :: Software Development
+License-File: LICENSE
+Requires-Dist: setuptools
+Dynamic: classifier
+Dynamic: keywords
+Dynamic: license
+Dynamic: license-file
+Dynamic: maintainer
+Dynamic: maintainer-email
+Dynamic: requires-dist
+Dynamic: summary

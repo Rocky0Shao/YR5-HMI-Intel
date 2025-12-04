@@ -1,0 +1,8 @@
+#!/home/rocky/autodrive/YR5-HMI-Intel/myenv/bin/python
+# -*- coding: utf-8 -*-
+import re
+import sys
+from urdf_parser_py.display_urdf import main
+if __name__ == '__main__':
+    sys.argv[0] = re.sub(r'(-script\.pyw|\.exe)?$', '', sys.argv[0])
+    sys.exit(main())

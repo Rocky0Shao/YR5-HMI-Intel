@@ -41,10 +41,21 @@ def parse_xy_pairs(data: List[Tuple[float, float]], threshold: float) -> List[Tu
     if threshold <= 0:
         return list(data)
 
-    out: List[Tuple[float, float]] = [data[0]]
-    prev_lat, prev_lon = data[0]
+    # Find first valid (finite) point as starting point
+    first_valid_idx = None
+    for idx, (lat, lon) in enumerate(data):
+        if math.isfinite(lat) and math.isfinite(lon):
+            first_valid_idx = idx
+            break
+    
+    if first_valid_idx is None:
+        return []  # No valid points found
+    
+    out: List[Tuple[float, float]] = [data[first_valid_idx]]
+    prev_lat, prev_lon = data[first_valid_idx]
 
-    for lat, lon in data[1:]:
+    # Process remaining points starting after the first valid one
+    for lat, lon in data[first_valid_idx + 1:]:
         # skip non-finite values
         if not (math.isfinite(lat) and math.isfinite(lon)):
             continue
@@ -115,6 +126,7 @@ class MinimalSubscriber(Node):
         self.hmi_rx_sock: Optional[socket.socket] = None
         self.hmi_rx_buf: bytes = b''
 
+        self._connect_hmi_rx()  # Initialize RX connection like TX
 
         # Timers
         # TX Navigation at 5 Hz
@@ -202,6 +214,7 @@ class MinimalSubscriber(Node):
 
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             s.settimeout(2.0)
             s.connect((self.hmi_rx_host, self.hmi_rx_port))
             # short read timeout so recv() doesn't block spin
@@ -222,6 +235,11 @@ class MinimalSubscriber(Node):
         """
         # Map engage_status to safety node convention (0,1,3)
         status = int(cmd.engage_status)
+        # Validate status is in valid range (0=DISENGAGE, 1=ENGAGE, 2=DISABLED)
+        if status not in (0, 1, 2):
+            self.get_logger().warning(f'Invalid engage_status value: {status}, expected 0, 1, or 2')
+            return  # Reject invalid commands
+        
         if status == 2:
             status = 3  # map DISABLED=2 → 3 for /safety/engage_state
 
@@ -263,10 +281,16 @@ class MinimalSubscriber(Node):
             self.hmi_rx_buf += chunk
 
             # Parse one or more frames from buffer
+            MAX_MSG_LEN = 1024 * 1024  # 1 MB maximum message size to prevent DoS
             while True:
                 if len(self.hmi_rx_buf) < 4:
                     break
                 msg_len = struct.unpack(">I", self.hmi_rx_buf[:4])[0]
+                # Validate message length to prevent buffer overflow/DoS
+                if msg_len > MAX_MSG_LEN:
+                    self.get_logger().error(f'Message length {msg_len} exceeds maximum {MAX_MSG_LEN}, dropping frame')
+                    self.hmi_rx_buf = b''  # Clear buffer to prevent stuck state
+                    break
                 if len(self.hmi_rx_buf) < 4 + msg_len:
                     break
 
