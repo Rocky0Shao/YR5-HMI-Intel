@@ -65,9 +65,9 @@ def parse_xy_pairs(data: List[Tuple[float, float]], threshold: float) -> List[Tu
 
     return out
 
-class MinimalSubscriber(Node):
+class WaypointSubscriber(Node):
     def __init__(self):
-        super().__init__('minimal_subscriber')
+        super().__init__('waypoint_subscriber')
 
         # Subscribe to raw points
         self.create_subscription(Float64MultiArray,
@@ -380,7 +380,7 @@ class MinimalSubscriber(Node):
         
 def main(args=None):
     rclpy.init(args=args)
-    node = MinimalSubscriber()
+    node = WaypointSubscriber()
     try:
         rclpy.spin(node)
     finally:
