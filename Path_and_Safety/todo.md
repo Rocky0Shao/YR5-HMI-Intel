@@ -132,3 +132,45 @@ hmi_tx is me recieving from hmi
 - Made hmi2intel node with keyboard input
 - display engage status & destination via terminal output
 
+
+# Daily Log — 12/04
+
+## Summary
+
+### The Core Objective
+I need to display live video feeds from our three Blackfly cameras onto the HMI’s Cameras Page in real-time.
+
+### The Problem: 
+Currently, the HMI tries to pull an RTSP stream directly. This works fine on Windows Qt Creator, but it fails completely when running inside our HMI Docker container on the vehicle hardware, even with host networking enabled.
+
+### The Solution: 
+Instead of relying on the RTSP feed, I need to build a custom pipeline. I need to create a mechanism on the Intel (compute) side that ingests the raw ROS camera data and pushes it to the HMI (Jetson/Display) via a robust protocol (TCP or WebSockets) that the Qt application can render. I will make a separate ROS node to avoid single bloated ROS node crashing 1 thread.
+
+## Technical Requirements
+**Scope:** Responsible for the entire pipeline, including backend data handling and frontend visualization.
+
+### 1. Backend (The "Bridge" Node)
+**Goal:** Implement a new instance (or update the existing RX node) on the **Intel** side.
+
+* **Input:** Subscribe to the following ROS topics from the bag/live stream:
+    * `/blackfly_0/image_raw`
+    * `/blackfly_1/image_raw`
+    * `/blackfly_2/image_raw`
+* **Processing:** Compress frames (JPEG/H.264) to ensure bandwidth efficiency before transmission.
+* **Output:** Transmit these frames to the HMI via **TCP** or **WebSockets**.
+
+> **Note on Synchronization:** This is critical. The video feed must not lag behind the map annotations. **Low latency is the priority.**
+
+### 2. Frontend (The HMI)
+**Goal:** Update the Qt/QML code to receive and display these custom frames.
+
+* **Target File:** `YR5-HMI/pages/CamerasPage.qml`
+* **Task:** Replace the broken RTSP player logic with a client (TCP/Websocket) that accepts your incoming image stream and paints it to the UI.
+
+### 3. Environment
+* **Docker:** The HMI runs in a container. I must use the provided image which already contains `Qt multimedia`, `ffmpeg`, and `gstreamer`.
+* **Hardware:** * **Production:** Jetson.
+    * **Development:** PC. 
+    * *Constraint:* Keep cross-platform compatibility in mind.
+## Progress
+- 
