@@ -84,11 +84,11 @@ class WaypointSubscriber(Node):
 
         # Publishers
         # Send Target Destination to Controls (ROS Topic String)
-        self.dest_pub = self.create_publisher(
-            String,
-            '/controls/target_destination',
-            10
-        )
+        # self.dest_pub = self.create_publisher(
+        #     String,
+        #     '/controls/target_destination',
+        #     10
+        # )
         # Send Engage/Disengage/Disabled to Safety (ROS Topic int: 0,1,3)
         self.engage_pub = self.create_publisher(
             Int32,

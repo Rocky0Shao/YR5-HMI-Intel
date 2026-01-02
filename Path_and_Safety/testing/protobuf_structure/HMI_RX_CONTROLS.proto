@@ -11,4 +11,6 @@ message Navigation {
     float heading_deg  = 3;
 
     repeated Waypoint waypoints = 4;   // may be empty OR partial OR full
+
+    int32 safety_states = 5; 
 }
