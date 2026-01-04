@@ -6,13 +6,17 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from sensor_msgs.msg import Image 
 from cv_bridge import CvBridge 
 
+# --- Protobuf Import ---
+# CHANGED: Importing your specific file name
+import CAMERA_pb2
+
 # --- Other Imports ---
-from typing import List, Tuple, Sequence, Optional
-import math
+from typing import Optional
 import socket   
 import struct
 import cv2
 import numpy as np
+import time
 
 class MultiCameraNode(Node):
     def __init__(self):
@@ -33,7 +37,6 @@ class MultiCameraNode(Node):
         self.display_width = 400
         self.display_height = 300
         
-        # Buffer to hold latest frames
         self.frames = {
             "cam0": np.zeros((self.display_height, self.display_width, 3), dtype=np.uint8),
             "cam1": np.zeros((self.display_height, self.display_width, 3), dtype=np.uint8),
@@ -46,23 +49,19 @@ class MultiCameraNode(Node):
             depth=10
         )
 
-        # --- Subscribers ---
         self.create_subscription(Image, '/blackfly_0/image_raw', self.callback_cam_0, qos_profile)
         self.create_subscription(Image, '/blackfly_1/image_raw', self.callback_cam_1, qos_profile)
         self.create_subscription(Image, '/blackfly_2/image_raw', self.callback_cam_2, qos_profile)
 
-        # --- Timer for TCP Sending (24 Hz) ---
+        # 24 Hz Timer
         self.create_timer(1.0 / 24.0, self.tx_video)
 
-        self.get_logger().info(f'Camera Node Started. Streaming separate images to {self.hmi_tx_host}:{self.hmi_tx_port}')
-
+        self.get_logger().info(f'Streaming Batch Protobuf to {self.hmi_tx_host}:{self.hmi_tx_port}')
 
     def _connect_hmi_tx(self) -> None:
         if self.hmi_tx_sock:
-            try:
-                self.hmi_tx_sock.close()
-            except Exception:
-                pass
+            try: self.hmi_tx_sock.close()
+            except Exception: pass
             self.hmi_tx_sock = None
 
         try:
@@ -75,49 +74,58 @@ class MultiCameraNode(Node):
             self.get_logger().info(f'Connected TCP to {self.hmi_tx_host}:{self.hmi_tx_port}')
         except Exception as e:
             self.hmi_tx_sock = None
-            self.get_logger().warning(f'TCP connect failed: {e}')
+            self.get_logger().debug(f'TCP connect failed: {e}')
 
     def tx_video(self):
-        """Sends each camera frame individually over TCP in sequence."""
+        """Bundles 3 images into one Protobuf Batch and sends it."""
         
-        # Check connection before starting the loop
         if self.hmi_tx_sock is None:
             self._connect_hmi_tx()
             if self.hmi_tx_sock is None:
                 return
 
-        # We iterate over the keys to send 3 separate packets
-        # The receiver will get them in this order: cam0 -> cam1 -> cam2
-        camera_order = ["cam0", "cam1", "cam2"]
+        # 1. Initialize the Batch Message using your specific module
+        batch_msg = CAMERA_pb2.CameraBatch()
+        batch_msg.timestamp = time.time_ns()
 
-        for key in camera_order:
+        camera_keys = ["cam0", "cam1", "cam2"]
+        frames_added = 0
+
+        # 2. Loop through cameras and populate the batch
+        for key in camera_keys:
             img = self.frames[key]
-
-            # Compress to JPEG
+            
+            # Compress
             encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 50] 
             success, jpeg_data = cv2.imencode('.jpg', img, encode_param)
             
             if not success:
-                self.get_logger().warning(f"Failed to encode {key}")
                 continue
 
-            payload = jpeg_data.tobytes()
+            # Add to Protobuf List
+            frame_msg = batch_msg.frames.add()
+            frame_msg.camera_id = key
+            frame_msg.jpeg_data = jpeg_data.tobytes()
+            frames_added += 1
 
-            try:
-                # Framing: [4-byte Length][Payload]
-                # Sending individual frame for this camera
-                header = struct.pack(">I", len(payload))
-                self.hmi_tx_sock.sendall(header + payload)
+        if frames_added == 0:
+            return
 
-            except (socket.timeout, ConnectionRefusedError, ConnectionResetError, BrokenPipeError) as e:
-                self.get_logger().warning(f'TCP send failed on {key}, will retry later: {e}')
-                self.hmi_tx_sock = None
-                # If connection breaks, stop trying to send the remaining cameras in this cycle
-                break 
-            except Exception as e:
-                self.get_logger().error(f'Unexpected TCP error: {e}')
-                self.hmi_tx_sock = None
-                break
+        # 3. Serialize and Send
+        try:
+            serialized_data = batch_msg.SerializeToString()
+            
+            # Header: 4-byte big-endian integer
+            length_header = struct.pack(">I", len(serialized_data))
+            
+            self.hmi_tx_sock.sendall(length_header + serialized_data)
+
+        except (socket.timeout, ConnectionRefusedError, ConnectionResetError, BrokenPipeError) as e:
+            self.get_logger().warning(f'TCP send failed: {e}')
+            self.hmi_tx_sock = None
+        except Exception as e:
+            self.get_logger().error(f'Unexpected TCP error: {e}')
+            self.hmi_tx_sock = None
 
     def process_image(self, msg, key):
         try:
@@ -127,24 +135,16 @@ class MultiCameraNode(Node):
         except Exception as e:
             self.get_logger().error(f'Image conversion failed: {e}')
 
-    # --- Callbacks ---
-    def callback_cam_0(self, msg):
-        self.process_image(msg, "cam0")
-
-    def callback_cam_1(self, msg):
-        self.process_image(msg, "cam1")
-
-    def callback_cam_2(self, msg):
-        self.process_image(msg, "cam2")
-
+    def callback_cam_0(self, msg): self.process_image(msg, "cam0")
+    def callback_cam_1(self, msg): self.process_image(msg, "cam1")
+    def callback_cam_2(self, msg): self.process_image(msg, "cam2")
 
 def main(args=None):
     rclpy.init(args=args)
     node = MultiCameraNode()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
+    except KeyboardInterrupt: pass
     finally:
         node.destroy_node()
         rclpy.shutdown()

@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package camera_msgs;
+
+// Represents a single image from one camera
+message CameraFrame {
+  string camera_id = 1;   // e.g., "cam0"
+  bytes jpeg_data = 2;    // The compressed JPEG
+}
+
+// Represents the list of images to be sent in one packet
+message CameraBatch {
+  repeated CameraFrame frames = 1; // "repeated" = list
+  int64 timestamp = 2;             // Optional: shared timestamp for the whole batch
+}
