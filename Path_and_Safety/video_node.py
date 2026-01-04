@@ -13,6 +13,10 @@ import socket
 import struct
 import cv2
 import numpy as np
+import time
+
+# --- IMPORT PROTOBUF DEFINITION ---
+import CAMERA_pb2
 
 class MultiCameraNode(Node):
     def __init__(self):
@@ -54,7 +58,7 @@ class MultiCameraNode(Node):
         # --- Timer for TCP Sending (24 Hz) ---
         self.create_timer(1.0 / 24.0, self.tx_video)
 
-        self.get_logger().info(f'Camera Node Started. Streaming separate images to {self.hmi_tx_host}:{self.hmi_tx_port}')
+        self.get_logger().info(f'Camera Node Started. Streaming serialized Protobuf to {self.hmi_tx_host}:{self.hmi_tx_port}')
 
 
     def _connect_hmi_tx(self) -> None:
@@ -78,18 +82,21 @@ class MultiCameraNode(Node):
             self.get_logger().warning(f'TCP connect failed: {e}')
 
     def tx_video(self):
-        """Sends each camera frame individually over TCP in sequence."""
+        """Bundles all frames into a Protobuf CameraBatch and sends it."""
         
-        # Check connection before starting the loop
+        # Check connection before processing
         if self.hmi_tx_sock is None:
             self._connect_hmi_tx()
             if self.hmi_tx_sock is None:
                 return
 
-        # We iterate over the keys to send 3 separate packets
-        # The receiver will get them in this order: cam0 -> cam1 -> cam2
-        camera_order = ["cam0", "cam1", "cam2"]
+        # 1. Create the Protobuf Message Object
+        batch_msg = CAMERA_pb2.CameraBatch()
+        batch_msg.timestamp = int(time.time() * 1000) # milliseconds
 
+        camera_order = ["cam0", "cam1", "cam2"]
+        
+        # 2. Loop through cameras and populate the message
         for key in camera_order:
             img = self.frames[key]
 
@@ -97,27 +104,30 @@ class MultiCameraNode(Node):
             encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 50] 
             success, jpeg_data = cv2.imencode('.jpg', img, encode_param)
             
-            if not success:
+            if success:
+                # Add a new frame to the repeated 'frames' field in the batch
+                frame_msg = batch_msg.frames.add()
+                frame_msg.camera_id = key
+                frame_msg.jpeg_data = jpeg_data.tobytes()
+            else:
                 self.get_logger().warning(f"Failed to encode {key}")
-                continue
 
-            payload = jpeg_data.tobytes()
+        # 3. Serialize the Protobuf object to bytes
+        try:
+            serialized_payload = batch_msg.SerializeToString()
+            
+            # 4. Create Header [4-byte length]
+            header = struct.pack(">I", len(serialized_payload))
+            
+            # 5. Send Header + Payload
+            self.hmi_tx_sock.sendall(header + serialized_payload)
 
-            try:
-                # Framing: [4-byte Length][Payload]
-                # Sending individual frame for this camera
-                header = struct.pack(">I", len(payload))
-                self.hmi_tx_sock.sendall(header + payload)
-
-            except (socket.timeout, ConnectionRefusedError, ConnectionResetError, BrokenPipeError) as e:
-                self.get_logger().warning(f'TCP send failed on {key}, will retry later: {e}')
-                self.hmi_tx_sock = None
-                # If connection breaks, stop trying to send the remaining cameras in this cycle
-                break 
-            except Exception as e:
-                self.get_logger().error(f'Unexpected TCP error: {e}')
-                self.hmi_tx_sock = None
-                break
+        except (socket.timeout, ConnectionRefusedError, ConnectionResetError, BrokenPipeError) as e:
+            self.get_logger().warning(f'TCP send failed, will retry later: {e}')
+            self.hmi_tx_sock = None
+        except Exception as e:
+            self.get_logger().error(f'Unexpected TCP error: {e}')
+            self.hmi_tx_sock = None
 
     def process_image(self, msg, key):
         try:

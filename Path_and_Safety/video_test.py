@@ -2,7 +2,7 @@ import socket
 import struct
 import cv2
 import numpy as np
-import CAMERA_pb2  # This must be the same file used in the ROS node
+import CAMERA_pb2  # Imports classes from CAMERA_pb2.py
 
 def recvall(sock, n):
     """
@@ -18,8 +18,8 @@ def recvall(sock, n):
     return data
 
 def main():
-    HOST = '127.0.0.1'  # Standard loopback interface address (localhost)
-    PORT = 65433        # Port to listen on (must match ROS node)
+    HOST = '127.0.0.1'  
+    PORT = 65433        
 
     print(f"Starting HMI Receiver on {HOST}:{PORT}...")
     
@@ -38,7 +38,6 @@ def main():
             try:
                 while True:
                     # 2. Read the 4-byte Length Header
-                    # We expect a 4-byte big-endian integer
                     raw_msglen = recvall(conn, 4)
                     if not raw_msglen:
                         break # Connection closed
@@ -51,6 +50,7 @@ def main():
                         break
 
                     # 4. Deserialize Protobuf
+                    # We use the class directly from the imported module
                     batch = CAMERA_pb2.CameraBatch()
                     batch.ParseFromString(proto_data)
 
@@ -58,7 +58,6 @@ def main():
                     for frame in batch.frames:
                         cam_id = frame.camera_id
                         
-                        # Convert raw bytes -> numpy array -> decoded image
                         np_arr = np.frombuffer(frame.jpeg_data, dtype=np.uint8)
                         img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
