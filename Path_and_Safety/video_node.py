@@ -134,8 +134,11 @@ class MultiCameraNode(Node):
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
             cv_image = cv2.resize(cv_image, (self.display_width, self.display_height))
             self.frames[key] = cv_image
+
+          
         except Exception as e:
             self.get_logger().error(f'Image conversion failed: {e}')
+            
 
     # --- Callbacks ---
     def callback_cam_0(self, msg):

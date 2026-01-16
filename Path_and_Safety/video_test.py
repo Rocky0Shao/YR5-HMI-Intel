@@ -2,7 +2,8 @@ import socket
 import struct
 import cv2
 import numpy as np
-import CAMERA_pb2  # Imports classes from CAMERA_pb2.py
+import time  # Added for bandwidth calculation
+import CAMERA_pb2
 
 def recvall(sock, n):
     """
@@ -23,7 +24,6 @@ def main():
 
     print(f"Starting HMI Receiver on {HOST}:{PORT}...")
     
-    # 1. Setup the Server Socket
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_sock:
         server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server_sock.bind((HOST, PORT))
@@ -35,26 +35,52 @@ def main():
         with conn:
             print(f"Connected by {addr}")
             
+            # --- Bandwidth Tracking Variables ---
+            byte_counter = 0
+            last_time = time.time()
+            update_interval = 1.0  # Update display every 1 second
+            # ------------------------------------
+
             try:
                 while True:
-                    # 2. Read the 4-byte Length Header
+                    # 1. Read the 4-byte Length Header
                     raw_msglen = recvall(conn, 4)
                     if not raw_msglen:
-                        break # Connection closed
+                        break 
                     
                     msglen = struct.unpack('>I', raw_msglen)[0]
 
-                    # 3. Read the Protobuf Payload
+                    # 2. Read the Protobuf Payload
                     proto_data = recvall(conn, msglen)
                     if not proto_data:
                         break
 
-                    # 4. Deserialize Protobuf
-                    # We use the class directly from the imported module
+                    # --- Bandwidth Calculation ---
+                    # Add header size (4 bytes) + payload size
+                    byte_counter += (4 + msglen)
+                    
+                    current_time = time.time()
+                    elapsed = current_time - last_time
+
+                    if elapsed >= update_interval:
+                        # Calculate speeds
+                        bytes_per_sec = byte_counter / elapsed
+                        mb_per_sec = bytes_per_sec / (1024 * 1024)   # Megabytes per second
+                        mbps = (bytes_per_sec * 8) / (1000 * 1000)   # Megabits per second (Network standard)
+
+                        # Print status with \r to overwrite the line (keeping terminal clean)
+                        print(f"\r[ Bandwidth: {mb_per_sec:.2f} MB/s | {mbps:.2f} Mbps ]", end="")
+                        
+                        # Reset counters
+                        byte_counter = 0
+                        last_time = current_time
+                    # -----------------------------
+
+                    # 3. Deserialize Protobuf
                     batch = CAMERA_pb2.CameraBatch()
                     batch.ParseFromString(proto_data)
 
-                    # 5. Decode and Display Images
+                    # 4. Decode and Display Images
                     for frame in batch.frames:
                         cam_id = frame.camera_id
                         
@@ -64,17 +90,17 @@ def main():
                         if img is not None:
                             cv2.imshow(f"Stream: {cam_id}", img)
                         else:
-                            print(f"Failed to decode image for {cam_id}")
+                            print(f"\nFailed to decode image for {cam_id}") # \n added to clear bandwidth line
 
-                    # 6. Handle UI Events (press 'q' to quit)
+                    # 5. Handle UI Events (press 'q' to quit)
                     if cv2.waitKey(1) & 0xFF == ord('q'):
-                        print("Quitting...")
+                        print("\nQuitting...")
                         break
 
             except Exception as e:
-                print(f"Error: {e}")
+                print(f"\nError: {e}")
             finally:
-                print("Closing connection.")
+                print("\nClosing connection.")
                 cv2.destroyAllWindows()
 
 if __name__ == "__main__":
