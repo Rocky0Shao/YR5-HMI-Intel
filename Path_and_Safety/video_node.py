@@ -26,7 +26,7 @@ class MultiCameraNode(Node):
 
         # --- TCP Configuration ---
         self.declare_parameter('hmi_tx_host', '127.0.0.1')
-        self.declare_parameter('hmi_tx_port', 65433)
+        self.declare_parameter('hmi_tx_port', 8554)
         self.hmi_tx_host = self.get_parameter('hmi_tx_host').value
         self.hmi_tx_port = int(self.get_parameter('hmi_tx_port').value)
         self.hmi_tx_sock: Optional[socket.socket] = None

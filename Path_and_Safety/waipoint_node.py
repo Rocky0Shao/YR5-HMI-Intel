@@ -110,7 +110,7 @@ class WaypointSubscriber(Node):
         # --- TCP: TX (ROS → HMI, Navigation protobuf) ---
 
         self.declare_parameter('hmi_tx_host', '127.0.0.1')
-        self.declare_parameter('hmi_tx_port', 65432)   # Navigation out
+        self.declare_parameter('hmi_tx_port', 5001)   # Navigation out
         self.hmi_tx_host: str = self.get_parameter('hmi_tx_host').value
         self.hmi_tx_port: int = int(self.get_parameter('hmi_tx_port').value)
         self.hmi_tx_sock: Optional[socket.socket] = None
@@ -120,7 +120,7 @@ class WaypointSubscriber(Node):
         # --- TCP: RX (HMI → ROS, HMITxMessage commands) ---
 
         self.declare_parameter('hmi_rx_host', '127.0.0.2')
-        self.declare_parameter('hmi_rx_port', 65431)    # Commands in
+        self.declare_parameter('hmi_rx_port', 6001)    # Commands in
         self.hmi_rx_host: str = self.get_parameter('hmi_rx_host').value
         self.hmi_rx_port: int = int(self.get_parameter('hmi_rx_port').value)
         self.hmi_rx_sock: Optional[socket.socket] = None

@@ -34,12 +34,12 @@ Intel (ROS 2 Nodes) <--TCP/Protobuf--> HMI Backend (Jetson)
   - **Publishes to:**
     - `/safety/engage_state` (Int32) - 0=disengage, 1=engage, 3=disabled
     - `/controls/target_destination` (String) - destination letter A-Z
-  - **TCP TX** on port 65432: Navigation protobuf to HMI (includes safety_states field)
-  - **TCP RX** on port 65431: HMITxMessage commands from HMI
+  - **TCP TX** on port 5001: Navigation protobuf to HMI (includes safety_states field)
+  - **TCP RX** on port 6001: HMITxMessage commands from HMI
 
 - **`video_node.py`** - Camera streaming node:
   - Subscribes to `/blackfly_0/image_raw`, `/blackfly_1/image_raw`, `/blackfly_2/image_raw`
-  - JPEG-compresses frames (quality=50) and sends via TCP on port 65433 at 24 Hz
+  - JPEG-compresses frames (quality=50) and sends via RTSP on port 8554 at 24 Hz
 
 ### Protobuf Messages
 
@@ -85,10 +85,10 @@ All TCP messages use a 4-byte big-endian length prefix followed by the protobuf 
 ros2 run <package_name> waipoint_node
 
 # With custom TCP endpoints
-ros2 run <package_name> waipoint_node --ros-args -p hmi_tx_host:=192.168.1.100 -p hmi_tx_port:=65432
+ros2 run <package_name> waipoint_node --ros-args -p hmi_tx_host:=192.168.1.100 -p hmi_tx_port:=5001
 
 # Run video node
-ros2 run <package_name> video_node --ros-args -p hmi_tx_host:=192.168.1.100 -p hmi_tx_port:=65433
+ros2 run <package_name> video_node --ros-args -p hmi_tx_host:=192.168.1.100 -p hmi_tx_port:=8554
 ```
 
 ## Testing
@@ -97,13 +97,13 @@ Test scripts simulate HMI endpoints:
 
 ```bash
 # Test receiving navigation data from Intel
-python intel2hmi_test.py   # Listens on port 65432
+python intel2hmi_test.py   # Listens on port 5001
 
 # Test sending commands to Intel
-python hmi2intel_test.py   # Listens on port 65431, interactive CLI
+python hmi2intel_test.py   # Listens on port 6001, interactive CLI
 
 # Test receiving video streams
-python video_test.py       # Listens on port 65433, displays with OpenCV
+python video_test.py       # Listens on port 8554, displays with OpenCV
 ```
 
 ## Regenerating Protobuf Files

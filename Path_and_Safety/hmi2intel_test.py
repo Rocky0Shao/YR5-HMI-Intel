@@ -14,7 +14,7 @@ import HMI_TX_CONTROLS_pb2 as hmi_tx
 @dataclass
 class TxConfig:
     host: str = '127.0.0.2'
-    port: int = 65431  # matches main_node.py default hmi_rx_port
+    port: int = 6001  # matches waipoint_node.py default hmi_rx_port
     backlog: int = 1
 
 

@@ -20,7 +20,7 @@ def recvall(sock, n):
 
 def main():
     HOST = '127.0.0.1'  
-    PORT = 65433        
+    PORT = 8554        
 
     print(f"Starting HMI Receiver on {HOST}:{PORT}...")
     
