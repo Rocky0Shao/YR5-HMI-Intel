@@ -1,21 +1,17 @@
 #!/usr/bin/env python3
 """
-Interactive HMI TX test server.
-Listens for main_node.py (client) to connect, then sends HMITxMessage protobufs over TCP with a 4-byte big-endian length prefix.
+hmi2intel_test.py - Test sender for safety_comms_node.py
+
+Simulates HMI sending HMITxMessage commands to Intel on port 6001.
+Connects as client to Intel server.
+
+Wire format: [4-byte length][payload]
 """
 import socket
 import struct
-from dataclasses import dataclass
 from typing import Optional
 
 import HMI_TX_CONTROLS_pb2 as hmi_tx
-
-
-@dataclass
-class TxConfig:
-    host: str = '127.0.0.2'
-    port: int = 6001  # matches waipoint_node.py default hmi_rx_port
-    backlog: int = 1
 
 
 def build_frame(engage_status: int, destination: str) -> bytes:
@@ -24,7 +20,7 @@ def build_frame(engage_status: int, destination: str) -> bytes:
     msg.engage_status = int(engage_status)
     if destination:
         msg.target_destination = destination
-    payload = msg.SerializeToString()  # no explicit length check for simplicity
+    payload = msg.SerializeToString()
     return struct.pack(">I", len(payload)) + payload
 
 
@@ -50,66 +46,80 @@ def prompt_destination(prompt: str) -> Optional[str]:
     return val.upper()
 
 
-def main() -> None:
-    cfg = TxConfig()
-    print(f"[listening] {cfg.host}:{cfg.port} (waiting for main_node.py)")
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
-        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        server.bind((cfg.host, cfg.port))
-        server.listen(cfg.backlog)
+def interactive_session(sock: socket.socket) -> None:
+    """Run interactive command session."""
+    print("\nCommands:")
+    print("  0 = DISENGAGE, 1 = ENGAGE, 2 = DISABLED")
+    print("  Destination: single letter a-z (blank keeps previous)")
+    print("  'q' to quit\n")
 
+    current_dest = ""
+    current_status = 0
+
+    try:
         while True:
-            try:
-                conn, addr = server.accept()
-            except KeyboardInterrupt:
-                print("\nShutting down.")
+            raw = input("\nPress Enter to send command, or 'q' to quit: ").strip()
+            if raw.lower() == "q":
+                print("[quitting]")
                 break
 
-            with conn:
-                print(f"[connected] {addr[0]}:{addr[1]}")
-                print("Commands:")
-                print("  0 = DISENGAGE, 1 = ENGAGE, 2 = DISABLED")
-                print("  Destination: single letter a-z (blank keeps previous)")
-                print("  Ctrl+C or 'q' to quit, Enter to send\n")
+            status = prompt_int("Engage status (0/1/2): ", {0, 1, 2})
+            if status is None:
+                continue
+            dest = prompt_destination("Destination (a-z, blank=keep): ")
+            if dest is None:
+                continue
 
-                current_dest = ""
-                current_status = 0
+            current_status = status
+            if dest != "":
+                current_dest = dest
 
-                try:
-                    while True:
-                        raw = input("Enter 'q' to quit connection or press Enter to send: ").strip()
-                        if raw.lower() == "q":
-                            print("[disconnecting client]")
-                            break
+            frame = build_frame(current_status, current_dest)
+            try:
+                sock.sendall(frame)
+                dest_label = current_dest or "(empty)"
+                print(f"Sent: engage_status={current_status}, destination='{dest_label}'")
+            except Exception as e:
+                print(f"[send failed] {e}")
+                break
 
-                        status = prompt_int("Engage status (0/1/2): ", {0, 1, 2})
-                        if status is None:
-                            continue
-                        dest = prompt_destination("Destination (a-z, blank=keep): ")
-                        if dest is None:
-                            continue
+    except KeyboardInterrupt:
+        print("\n[interrupted]")
 
-                        current_status = status
-                        if dest != "":
-                            current_dest = dest
 
-                        frame = build_frame(current_status, current_dest)
-                        try:
-                            conn.sendall(frame)
-                            dest_label = current_dest or "(empty)"
-                            print(f"Sent engage_status={current_status}, target_destination='{dest_label}'")
-                        except Exception as e:
-                            print(f"[send failed] {e}")
-                            break
-                except KeyboardInterrupt:
-                    print("\n[stop]")
-                    break
-                finally:
-                    try:
-                        conn.shutdown(socket.SHUT_WR)
-                    except Exception:
-                        pass
-                    print("[client closed]")
+def main() -> None:
+    host = '127.0.0.1'  # Intel's address
+    port = 6001
+
+    print(f"=== HMI→Intel Test Sender (port {port}) ===")
+    print(f"Connecting to Intel at {host}:{port}...")
+
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        sock.settimeout(5.0)
+        sock.connect((host, port))
+        sock.settimeout(None)
+        print(f"[connected] to {host}:{port}")
+
+        interactive_session(sock)
+
+    except ConnectionRefusedError:
+        print(f"[error] Connection refused. Is safety_comms_node running on {host}:{port}?")
+    except socket.timeout:
+        print(f"[error] Connection timed out. Is safety_comms_node running on {host}:{port}?")
+    except Exception as e:
+        print(f"[error] {e}")
+    finally:
+        try:
+            sock.shutdown(socket.SHUT_WR)
+        except Exception:
+            pass
+        try:
+            sock.close()
+        except Exception:
+            pass
+        print("[connection closed]")
 
 
 if __name__ == "__main__":

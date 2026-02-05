@@ -1,83 +1,94 @@
 # ROS 2 Node Interface Documentation
 
-This document describes the inputs, outputs, and communication interfaces for the `waipoint_node.py` and `video_node.py` ROS 2 nodes.
+This document describes the inputs, outputs, and communication interfaces for the Intel-side ROS 2 nodes that communicate with the HMI (Jetson).
 
 ---
 
-## waipoint_node.py (WaypointSubscriber)
+## Port Summary
 
-**Node Name:** `waypoint_subscriber`
+### INPUT Ports (Intel → HMI)
 
-This node bridges ROS 2 and the HMI backend. It subscribes to navigation data from the vehicle systems, transmits it to the HMI over TCP, and receives control commands from the HMI which it publishes to ROS topics.
+```
+┌──────┬────────────────────┬─────────────────────────────────────────────────┐
+│ Port │     Protocol       │                    Purpose                      │
+├──────┼────────────────────┼─────────────────────────────────────────────────┤
+│ 5001 │ TCP/Protobuf       │ Navigation + CameraBatch (type-prefixed)        │
+│      │ (type-prefixed)    │   0x01 = Navigation (GPS, heading, waypoints)   │
+│      │                    │   0x02 = CameraBatch (JPEG camera frames)       │
+├──────┼────────────────────┼─────────────────────────────────────────────────┤
+│ 5002 │ TCP/Protobuf       │ Perception/CAN data (stubbed, not active)       │
+├──────┼────────────────────┼─────────────────────────────────────────────────┤
+│ 5003 │ TCP/Protobuf       │ SafetyStatus (FSM state + description)          │
+└──────┴────────────────────┴─────────────────────────────────────────────────┘
+```
+
+### OUTPUT Ports (HMI → Intel)
+
+```
+┌──────┬──────────────┬───────────────────────────────────────────┐
+│ Port │   Protocol   │                  Purpose                  │
+├──────┼──────────────┼───────────────────────────────────────────┤
+│ 6001 │ TCP/Protobuf │ HMITxMessage (engage + destination)       │
+└──────┴──────────────┴───────────────────────────────────────────┘
+```
+
+---
+
+## safety_comms_node.py (SafetyCommsNode)
+
+**Node Name:** `safety_comms_node`
+
+Bidirectional communication node for safety FSM state and HMI commands.
 
 ### ROS 2 Subscriptions (Inputs)
 
 | Topic | Message Type | QoS Depth | Description |
 |-------|--------------|-----------|-------------|
-| `/raw_points_remain` | `std_msgs/Float64MultiArray` | 10 | Waypoints from Controls. Flat array `[lat1, lon1, lat2, lon2, ...]`. Downsampled to 1-meter spacing before transmission. |
-| `/inspvax` | `novatel_gps_msgs/Inspvax` | 10 | NovAtel GPS position. Uses `latitude`, `longitude`, and `azimuth` fields (degrees). |
+| `/fsm_state` | `std_msgs/String` | 10 | FSM state number as string (e.g., "2") |
+| `/fsm_description` | `std_msgs/String` | 10 | FSM state description (e.g., "close door") |
 
 ### ROS 2 Publishers (Outputs)
 
 | Topic | Message Type | QoS Depth | Description |
 |-------|--------------|-----------|-------------|
-| `/safety/engage_state` | `std_msgs/Int32` | 10 | Engage state for the Safety node. Values: `0`=DISENGAGE, `1`=ENGAGE, `3`=DISABLED |
-| `/controls/target_destination` | `std_msgs/String` | 10 | Target destination letter (A-Z) for Controls. Only published when non-empty. |
+| `/safety/engage_state` | `std_msgs/Int32` | 10 | Engage state: `0`=DISENGAGE, `1`=ENGAGE, `3`=DISABLED |
+| `/controls/target_destination` | `std_msgs/String` | 10 | Target destination letter (A-Z) |
 
 ### TCP Interfaces
 
-#### TX: Intel → HMI (Navigation Data)
+#### TX: Intel → HMI (SafetyStatus on port 5003)
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `hmi_tx_host` | `127.0.0.1` | HMI backend IP address |
-| `hmi_tx_port` | `65432` | HMI backend port |
+| `hmi_tx_port` | `5003` | HMI SafetyStatus port |
 
 **Protocol:** Length-prefixed Protobuf
-**Send Rate:** 5 Hz (200ms interval)
-**Direction:** Client (this node connects to HMI server)
+**Send Rate:** On state change (event-driven)
+**Direction:** Client (Intel connects to HMI server)
 
 **Wire Format:**
 ```
 [4 bytes: big-endian uint32 length][N bytes: protobuf payload]
 ```
 
-**Protobuf Message (`Navigation`):**
+**Protobuf Message (`SafetyStatus`):**
 ```protobuf
-message Navigation {
-    float current_lat  = 1;   // Current GPS latitude (degrees)
-    float current_lon  = 2;   // Current GPS longitude (degrees)
-    float heading_deg  = 3;   // Vehicle heading/azimuth (degrees)
-    repeated Waypoint waypoints = 4;  // Downsampled remaining waypoints
-    int32 safety_states = 5;  // FSM state (currently not populated)
-}
-
-message Waypoint {
-    float lat = 1;
-    float lon = 2;
+message SafetyStatus {
+    int32 state = 1;        // FSM state number (0-10)
+    string description = 2; // Human-readable description
 }
 ```
 
-**Notes:**
-- Waypoints are downsampled: only points >= 1 meter apart are included
-- Non-finite (NaN/Inf) values are filtered out
-- Empty messages (0 bytes) are not sent
-
-#### RX: HMI → Intel (Control Commands)
+#### RX: HMI → Intel (HMITxMessage on port 6001)
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `hmi_rx_host` | `127.0.0.2` | HMI command server IP |
-| `hmi_rx_port` | `65431` | HMI command server port |
+| `hmi_rx_port` | `6001` | Port to listen for HMI commands |
 
 **Protocol:** Length-prefixed Protobuf
 **Poll Rate:** 20 Hz (50ms interval)
-**Direction:** Client (this node connects to HMI server)
-
-**Wire Format:**
-```
-[4 bytes: big-endian uint32 length][N bytes: protobuf payload]
-```
+**Direction:** Server (Intel listens, HMI connects)
 
 **Protobuf Message (`HMITxMessage`):**
 ```protobuf
@@ -98,45 +109,40 @@ message HMITxMessage {
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `hmi_tx_host` | string | `127.0.0.1` | TCP host for Navigation TX |
-| `hmi_tx_port` | int | `65432` | TCP port for Navigation TX |
-| `hmi_rx_host` | string | `127.0.0.2` | TCP host for Command RX |
-| `hmi_rx_port` | int | `65431` | TCP port for Command RX |
+| `hmi_tx_host` | string | `127.0.0.1` | TCP host for SafetyStatus TX |
+| `hmi_tx_port` | int | `5003` | TCP port for SafetyStatus TX |
+| `hmi_rx_port` | int | `6001` | TCP port for Command RX (server) |
 
 ### Example Launch
 
 ```bash
-ros2 run <package> waipoint_node --ros-args \
+ros2 run <package> safety_comms_node --ros-args \
     -p hmi_tx_host:=192.168.1.100 \
-    -p hmi_tx_port:=65432 \
-    -p hmi_rx_host:=192.168.1.100 \
-    -p hmi_rx_port:=65431
+    -p hmi_tx_port:=5003 \
+    -p hmi_rx_port:=6001
 ```
 
 ### Data Flow Diagram
 
 ```
                     ┌─────────────────────────────────────────┐
-                    │         waipoint_node.py                │
-                    │         (waypoint_subscriber)           │
+                    │       safety_comms_node.py              │
+                    │         (safety_comms_node)             │
                     │                                         │
- /raw_points_remain │  ┌──────────┐                           │
- (Float64MultiArray)├─►│ cb_raw_  │                           │
-                    │  │ points_  │                           │
-                    │  │ remain   │     ┌──────────────┐      │  TCP:65432
-                    │  └──────────┘     │ build_nav_   │      │  Navigation
-                    │                   │ proto()      ├──────┼─────────────►
-        /inspvax    │  ┌──────────┐     │              │      │     HMI
-       (Inspvax)    ├─►│ cb_      │     │ tx_nav()     │      │
-                    │  │ inspvax  │     │ @ 5 Hz       │      │
-                    │  └──────────┘     └──────────────┘      │
+    /fsm_state      │  ┌──────────┐                           │
+    (String)        ├─►│ cb_fsm_  │                           │
+                    │  │ state    │     ┌──────────────┐      │  TCP:5003
+                    │  └──────────┘     │ SafetyStatus │      │  SafetyStatus
+                    │                   │ (on change)  ├──────┼─────────────►
+ /fsm_description   │  ┌──────────┐     │              │      │     HMI
+    (String)        ├─►│ cb_fsm_  │     └──────────────┘      │
+                    │  │ descr    │                           │
+                    │  └──────────┘                           │
                     │                                         │
-                    │                   ┌──────────────┐      │  TCP:65431
+                    │                   ┌──────────────┐      │  TCP:6001
                     │                   │ rx_step()    │◄─────┼─────────────
                     │                   │ @ 20 Hz      │      │  HMITxMessage
-                    │                   │              │      │     HMI
-                    │                   │ _handle_hmi_ │      │
-                    │                   │ command()    │      │
+                    │                   │ (server)     │      │     HMI
                     │                   └──────┬───────┘      │
                     │                          │              │
                     │     ┌────────────────────┼──────────┐   │
@@ -150,21 +156,21 @@ ros2 run <package> waipoint_node --ros-args \
 
 ---
 
-## video_node.py (MultiCameraNode)
+## data_stream_node.py (DataStreamNode)
 
-**Node Name:** `multi_camera_subscriber`
+**Node Name:** `data_stream_node`
 
-This node subscribes to camera image topics, compresses frames to JPEG, batches them into a Protobuf message, and streams them to the HMI over TCP.
+TX-only node for streaming navigation and video data to HMI on a single port.
 
 ### ROS 2 Subscriptions (Inputs)
 
 | Topic | Message Type | QoS | Description |
 |-------|--------------|-----|-------------|
-| `/blackfly_0/image_raw` | `sensor_msgs/Image` | BEST_EFFORT, depth=10 | Front/primary camera raw image |
-| `/blackfly_1/image_raw` | `sensor_msgs/Image` | BEST_EFFORT, depth=10 | Secondary camera raw image |
-| `/blackfly_2/image_raw` | `sensor_msgs/Image` | BEST_EFFORT, depth=10 | Tertiary camera raw image |
-
-**Expected Image Encoding:** Any encoding convertible to `bgr8` via cv_bridge
+| `/raw_points_remain` | `std_msgs/Float64MultiArray` | depth=10 | Waypoints `[lat1, lon1, lat2, lon2, ...]` |
+| `/inspvax` | `novatel_gps_msgs/Inspvax` | depth=10 | GPS position and heading |
+| `/blackfly_0/image_raw` | `sensor_msgs/Image` | BEST_EFFORT, depth=10 | Camera 0 |
+| `/blackfly_1/image_raw` | `sensor_msgs/Image` | BEST_EFFORT, depth=10 | Camera 1 |
+| `/blackfly_2/image_raw` | `sensor_msgs/Image` | BEST_EFFORT, depth=10 | Camera 2 |
 
 ### ROS 2 Publishers (Outputs)
 
@@ -172,26 +178,46 @@ This node subscribes to camera image topics, compresses frames to JPEG, batches 
 
 ### TCP Interface
 
-#### TX: Intel → HMI (Camera Stream)
+#### TX: Intel → HMI (Navigation + CameraBatch on port 5001)
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `hmi_tx_host` | `127.0.0.1` | HMI backend IP address |
-| `hmi_tx_port` | `65433` | HMI video stream port |
+| `hmi_tx_port` | `5001` | HMI data stream port |
 
-**Protocol:** Length-prefixed Protobuf
-**Send Rate:** 24 Hz (~41.7ms interval)
-**Direction:** Client (this node connects to HMI server)
+**Protocol:** Type-prefixed Protobuf
+**Direction:** Client (Intel connects to HMI server)
 
 **Wire Format:**
 ```
-[4 bytes: big-endian uint32 length][N bytes: protobuf payload]
+[4 bytes: big-endian uint32 length][1 byte: message type][N bytes: protobuf payload]
+```
+Note: The length field includes the type byte (length = 1 + payload_size).
+
+**Message Types:**
+| Type ID | Message | Send Rate |
+|---------|---------|-----------|
+| `0x01` | Navigation | 5 Hz |
+| `0x02` | CameraBatch | 24 Hz |
+
+**Protobuf Message (`Navigation`):**
+```protobuf
+message Navigation {
+    float current_lat  = 1;   // Current GPS latitude (degrees)
+    float current_lon  = 2;   // Current GPS longitude (degrees)
+    float heading_deg  = 3;   // Vehicle heading/azimuth (degrees)
+    repeated Waypoint waypoints = 4;  // Downsampled remaining waypoints
+    int32 safety_states = 5;  // (deprecated, use SafetyStatus on port 5003)
+}
+
+message Waypoint {
+    float lat = 1;
+    float lon = 2;
+}
 ```
 
 **Protobuf Message (`CameraBatch`):**
 ```protobuf
-package camera_msgs;
-
 message CameraBatch {
     repeated CameraFrame frames = 1;  // List of camera frames
     int64 timestamp = 2;              // Unix timestamp in milliseconds
@@ -212,71 +238,133 @@ message CameraFrame {
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `hmi_tx_host` | string | `127.0.0.1` | TCP host for video stream |
-| `hmi_tx_port` | int | `65433` | TCP port for video stream |
+| `hmi_tx_host` | string | `127.0.0.1` | TCP host for data stream |
+| `hmi_tx_port` | int | `5001` | TCP port for data stream |
 
 ### Example Launch
 
 ```bash
-ros2 run <package> video_node --ros-args \
+ros2 run <package> data_stream_node --ros-args \
     -p hmi_tx_host:=192.168.1.100 \
-    -p hmi_tx_port:=65433
+    -p hmi_tx_port:=5001
 ```
 
 ### Data Flow Diagram
 
 ```
                     ┌─────────────────────────────────────────┐
-                    │          video_node.py                  │
-                    │       (multi_camera_subscriber)         │
+                    │        data_stream_node.py              │
+                    │          (data_stream_node)             │
                     │                                         │
-/blackfly_0/image_raw│  ┌──────────┐     ┌──────────────┐     │
-   (Image)          ├─►│callback_ │     │              │     │
-                    │  │cam_0     ├────►│ frames dict  │     │
-                    │  └──────────┘     │              │     │
-/blackfly_1/image_raw│  ┌──────────┐     │ cam0: [img]  │     │
-   (Image)          ├─►│callback_ │     │ cam1: [img]  │     │
-                    │  │cam_1     ├────►│ cam2: [img]  │     │
-                    │  └──────────┘     │              │     │
-/blackfly_2/image_raw│  ┌──────────┐     └──────┬───────┘     │
-   (Image)          ├─►│callback_ │            │             │
-                    │  │cam_2     ├────────────┘             │
-                    │  └──────────┘                          │
-                    │                                         │
-                    │              ┌──────────────────┐       │  TCP:65433
-                    │              │ tx_video()       │       │  CameraBatch
-                    │              │ @ 24 Hz          ├───────┼───────────►
-                    │              │                  │       │    HMI
-                    │              │ - resize 400x300 │       │
-                    │              │ - JPEG q=50      │       │
-                    │              │ - Protobuf batch │       │
-                    │              └──────────────────┘       │
+ /raw_points_remain │  ┌──────────┐     ┌──────────────┐      │
+ (Float64MultiArray)├─►│ cb_raw_  │     │ Navigation   │      │
+                    │  │ points   │     │ @ 5 Hz       │      │
+        /inspvax    │  └──────────┘     │ type=0x01    │      │
+       (Inspvax)    ├─►┌──────────┐     └──────┬───────┘      │
+                    │  │ cb_      │            │              │
+                    │  │ inspvax  │            │              │
+                    │  └──────────┘            │              │  TCP:5001
+                    │                          ├──────────────┼───────────►
+/blackfly_0/image   │  ┌──────────┐            │              │    HMI
+   (Image)          ├─►│ cb_cam_0 │     ┌──────┴───────┐      │
+                    │  └──────────┘     │ CameraBatch  │      │
+/blackfly_1/image   │  ┌──────────┐     │ @ 24 Hz      │      │
+   (Image)          ├─►│ cb_cam_1 ├────►│ type=0x02    │      │
+                    │  └──────────┘     │              │      │
+/blackfly_2/image   │  ┌──────────┐     │ - resize     │      │
+   (Image)          ├─►│ cb_cam_2 │     │ - JPEG q=50  │      │
+                    │  └──────────┘     └──────────────┘      │
                     │                                         │
                     └─────────────────────────────────────────┘
 ```
 
 ---
 
-## Integration Checklist
+## Test Scripts
+
+Test scripts simulate HMI endpoints for development and debugging:
+
+| Script | Port | Role | Description |
+|--------|------|------|-------------|
+| `intel2hmi_test.py` | 5001 | Server | Receives Navigation + CameraBatch (type-prefixed), displays camera feeds |
+| `safety_test.py` | 5003 | Server | Receives SafetyStatus, displays FSM state and description |
+| `hmi2intel_test.py` | 6001 | Client | Sends HMITxMessage commands interactively |
+| `video_test.py` | 8554 | Server | **Deprecated** - for legacy video_node.py only |
+
+### Quick Test (without ROS)
+
+```bash
+# Terminal 1: Start data stream receiver
+cd /home/rocky/autodrive/YR5-HMI-Intel/Path_and_Safety
+python intel2hmi_test.py
+
+# Terminal 2: Start safety status receiver
+python safety_test.py
+
+# Terminal 3: Run data stream node
+python data_stream_node.py
+
+# Terminal 4: Run safety comms node
+python safety_comms_node.py
+
+# Terminal 5: Send HMI commands
+python hmi2intel_test.py
+```
+
+### Test Script Details
+
+**intel2hmi_test.py** (port 5001):
+- Listens for connections from `data_stream_node.py`
+- Parses type-prefixed messages (0x01=Navigation, 0x02=CameraBatch)
+- Displays camera frames in OpenCV windows
+- Shows bandwidth statistics
+- Press 'q' in camera window to quit
+
+**safety_test.py** (port 5003):
+- Listens for connections from `safety_comms_node.py`
+- Displays FSM state number and name
+- Displays state description
+
+**hmi2intel_test.py** (port 6001):
+- Connects as client to `safety_comms_node.py`
+- Interactive CLI for sending engage/disengage commands
+- Supports destination selection (A-Z)
+
+---
+
+## Legacy Nodes (Deprecated)
+
+The following nodes have been replaced by the new architecture:
+
+- **`waipoint_node.py`** → Replaced by `safety_comms_node.py` + `data_stream_node.py`
+- **`video_node.py`** → Replaced by `data_stream_node.py`
+
+---
+
+## HMI Integration Checklist
 
 ### For HMI Backend (Receiver Side)
 
-1. **Navigation Data (port 65432)**
-   - Listen for TCP connections
+1. **Data Stream (port 5001) - NEW FORMAT**
+   - Listen for TCP connections from Intel
    - Read 4-byte length prefix (big-endian)
-   - Read payload bytes and deserialize as `Navigation` protobuf
+   - Read 1-byte message type
+   - Read remaining payload bytes
+   - Deserialize based on type:
+     - `0x01` → `Navigation` protobuf
+     - `0x02` → `CameraBatch` protobuf
    - Handle reconnection (node will retry on connection loss)
 
-2. **Control Commands (port 65431)**
-   - Listen for TCP connections
-   - Send length-prefixed `HMITxMessage` protobuf
-   - Expect node to poll at 20 Hz
-
-3. **Video Stream (port 65433)**
-   - Listen for TCP connections
+2. **SafetyStatus (port 5003) - NEW**
+   - Listen for TCP connections from Intel
    - Read 4-byte length prefix (big-endian)
-   - Deserialize as `CameraBatch` protobuf
-   - Decode JPEG bytes for each `CameraFrame`
+   - Read payload and deserialize as `SafetyStatus` protobuf
+   - Display state and description on HMI
+
+3. **Control Commands (port 6001)**
+   - Connect to Intel as client
+   - Send length-prefixed `HMITxMessage` protobuf
+   - Intel polls at 20 Hz
 
 ### For ROS 2 Integration (Publisher Side)
 
@@ -293,43 +381,32 @@ ros2 run <package> video_node --ros-args \
    - Publish to `/blackfly_0/image_raw`, `/blackfly_1/image_raw`, `/blackfly_2/image_raw`
    - Use `sensor_msgs/Image` with QoS BEST_EFFORT
 
-4. **Engage State Subscriber**
+4. **Safety FSM Publishers**
+   - Publish state to `/fsm_state` as `String` (e.g., "2")
+   - Publish description to `/fsm_description` as `String` (e.g., "close door")
+
+5. **Engage State Subscriber**
    - Subscribe to `/safety/engage_state` (`Int32`)
    - Values: 0=disengage, 1=engage, 3=disabled
 
-5. **Destination Subscriber**
+6. **Destination Subscriber**
    - Subscribe to `/controls/target_destination` (`String`)
    - Values: single letter A-Z
 
 ---
 
-## TCP Message Parsing Example (Python)
+## TCP Message Parsing Examples (Python)
+
+### Standard Length-Prefixed (ports 5003, 6001)
 
 ```python
 import struct
-import socket
 
 def recv_protobuf_message(sock, proto_class):
     """Receive a length-prefixed protobuf message."""
-    # Read 4-byte length header
-    header = b''
-    while len(header) < 4:
-        chunk = sock.recv(4 - len(header))
-        if not chunk:
-            raise ConnectionError("Connection closed")
-        header += chunk
-
+    header = recv_exactly(sock, 4)
     msg_len = struct.unpack(">I", header)[0]
-
-    # Read payload
-    payload = b''
-    while len(payload) < msg_len:
-        chunk = sock.recv(msg_len - len(payload))
-        if not chunk:
-            raise ConnectionError("Connection closed")
-        payload += chunk
-
-    # Deserialize
+    payload = recv_exactly(sock, msg_len)
     msg = proto_class()
     msg.ParseFromString(payload)
     return msg
@@ -339,4 +416,41 @@ def send_protobuf_message(sock, msg):
     payload = msg.SerializeToString()
     header = struct.pack(">I", len(payload))
     sock.sendall(header + payload)
+```
+
+### Type-Prefixed (port 5001)
+
+```python
+import struct
+
+MSG_TYPE_NAVIGATION = 0x01
+MSG_TYPE_CAMERA = 0x02
+
+def recv_typed_message(sock, nav_class, camera_class):
+    """Receive a type-prefixed protobuf message."""
+    header = recv_exactly(sock, 4)
+    total_len = struct.unpack(">I", header)[0]
+
+    msg_type = struct.unpack("B", recv_exactly(sock, 1))[0]
+    payload = recv_exactly(sock, total_len - 1)
+
+    if msg_type == MSG_TYPE_NAVIGATION:
+        msg = nav_class()
+    elif msg_type == MSG_TYPE_CAMERA:
+        msg = camera_class()
+    else:
+        raise ValueError(f"Unknown message type: {msg_type}")
+
+    msg.ParseFromString(payload)
+    return msg_type, msg
+
+def recv_exactly(sock, n):
+    """Read exactly n bytes from socket."""
+    data = b''
+    while len(data) < n:
+        chunk = sock.recv(n - len(data))
+        if not chunk:
+            raise ConnectionError("Connection closed")
+        data += chunk
+    return data
 ```

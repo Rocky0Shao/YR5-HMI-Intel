@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+// Safety FSM status message sent from Intel to HMI
+// Port: 5003 (Intel -> HMI)
+message SafetyStatus {
+    int32 state = 1;        // FSM state number (0-10)
+    string description = 2; // Human-readable state description (e.g., "close door")
+}
