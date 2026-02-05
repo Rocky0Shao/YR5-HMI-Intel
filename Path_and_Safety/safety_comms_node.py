@@ -13,8 +13,8 @@ TX (Intel -> HMI) on port 5003:
     - Sends on every state change
 
 ROS Subscriptions:
-    - /fsm_state (std_msgs/String) - FSM state number as string
-    - /fsm_description (std_msgs/String) - FSM state description
+    - /autodrive/fsm/state (autodrive_msgs/FSMStatus) - FSM state (uint8) and timestamp
+    - /autodrive/fsm/description (std_msgs/String) - FSM state description
 
 ROS Publications:
     - /safety/engage_state (std_msgs/Int32) - 0=disengage, 1=engage, 3=disabled
@@ -24,6 +24,7 @@ ROS Publications:
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String, Int32
+from autodrive_msgs.msg import FSMStatus
 
 from typing import Optional
 import socket
@@ -41,14 +42,14 @@ class SafetyCommsNode(Node):
 
         # --- ROS Subscribers ---
         self.create_subscription(
-            String,
-            '/fsm_state',
+            FSMStatus,
+            '/autodrive/fsm/state',
             self.cb_fsm_state,
             10
         )
         self.create_subscription(
             String,
-            '/fsm_description',
+            '/autodrive/fsm/description',
             self.cb_fsm_description,
             10
         )
@@ -296,14 +297,10 @@ class SafetyCommsNode(Node):
     # ROS Callbacks
     # --------------------------------------------------------------------------
 
-    def cb_fsm_state(self, msg: String) -> None:
+    def cb_fsm_state(self, msg: FSMStatus) -> None:
         """Handle FSM state update from safety node."""
-        try:
-            # State may be published as string number (e.g., "2")
-            self.current_fsm_state = int(msg.data)
-            self._send_safety_status()
-        except ValueError:
-            self.get_logger().warning(f'Invalid FSM state value: {msg.data}')
+        self.current_fsm_state = int(msg.state)
+        self._send_safety_status()
 
     def cb_fsm_description(self, msg: String) -> None:
         """Handle FSM description update from safety node."""
