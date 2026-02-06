@@ -88,7 +88,7 @@ def interactive_session(sock: socket.socket) -> None:
 
 
 def main() -> None:
-    host = '127.0.0.1'  # Intel's address
+    host = '192.168.69.10'  # Intel's address
     port = 6001
 
     print(f"=== HMI→Intel Test Sender (port {port}) ===")

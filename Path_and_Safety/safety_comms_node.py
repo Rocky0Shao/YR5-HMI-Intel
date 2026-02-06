@@ -7,8 +7,8 @@ RX (HMI -> Intel) on port 6001:
     - Receives HMITxMessage (engage_status, target_destination)
     - Intel listens as server, HMI connects as client
 
-TX (Intel -> HMI) on port 5003:
-    - Sends SafetyStatus (state, description)
+TX (Intel -> HMI) on port 5001:
+    - Sends Navigation message (safety_states only)
     - Intel connects as client, HMI listens as server
     - Sends on every state change
 
@@ -28,11 +28,10 @@ from std_msgs.msg import String, Int32
 from typing import Optional
 import socket
 import struct
-import threading
 import select
 
 import HMI_TX_CONTROLS_pb2 as hmi_tx
-import SAFETY_STATUS_pb2 as safety_pb
+import HMI_RX_CONTROLS_pb2 as nav_pb  # New Navigation protobuf
 
 
 class SafetyCommsNode(Node):
@@ -69,11 +68,10 @@ class SafetyCommsNode(Node):
         self.current_fsm_state: int = 0
         self.current_fsm_description: str = ""
         self.last_sent_state: Optional[int] = None
-        self.last_sent_description: Optional[str] = None
 
-        # --- TCP TX: Intel -> HMI (SafetyStatus on port 5003) ---
-        self.declare_parameter('hmi_tx_host', '127.0.0.1')
-        self.declare_parameter('hmi_tx_port', 5003)
+        # --- TCP TX: Intel -> HMI (Navigation on port 5001) ---
+        self.declare_parameter('hmi_tx_host', '192.168.69.69')
+        self.declare_parameter('hmi_tx_port', 5001)  # updated port
         self.hmi_tx_host: str = self.get_parameter('hmi_tx_host').value
         self.hmi_tx_port: int = int(self.get_parameter('hmi_tx_port').value)
         self.hmi_tx_sock: Optional[socket.socket] = None
@@ -97,11 +95,11 @@ class SafetyCommsNode(Node):
         )
 
     # --------------------------------------------------------------------------
-    # TCP TX: Intel -> HMI (SafetyStatus)
+    # TCP TX: Intel -> HMI (Navigation)
     # --------------------------------------------------------------------------
 
     def _connect_hmi_tx(self) -> None:
-        """Connect to HMI for SafetyStatus transmission."""
+        """Connect to HMI for Navigation transmission."""
         if self.hmi_tx_sock:
             try:
                 self.hmi_tx_sock.close()
@@ -116,25 +114,23 @@ class SafetyCommsNode(Node):
             s.connect((self.hmi_tx_host, self.hmi_tx_port))
             s.settimeout(0.5)
             self.hmi_tx_sock = s
-            self.get_logger().info(f'Connected SafetyStatus TX to {self.hmi_tx_host}:{self.hmi_tx_port}')
+            self.get_logger().info(f'Connected Navigation TX to {self.hmi_tx_host}:{self.hmi_tx_port}')
         except Exception as e:
             self.hmi_tx_sock = None
-            self.get_logger().warning(f'SafetyStatus TX connect failed: {e}')
+            self.get_logger().warning(f'Navigation TX connect failed: {e}')
 
-    def _send_safety_status(self) -> None:
-        """Send SafetyStatus protobuf to HMI (length-prefixed)."""
-        # Only send if state or description changed
-        if (self.current_fsm_state == self.last_sent_state and
-                self.current_fsm_description == self.last_sent_description):
+    def _send_navigation(self) -> None:
+        """Send Navigation protobuf to HMI (length-prefixed), only updating safety_states."""
+        # Only send if state changed
+        if self.current_fsm_state == self.last_sent_state:
             return
 
         try:
-            # Build protobuf
-            status = safety_pb.SafetyStatus()
-            status.state = self.current_fsm_state
-            status.description = self.current_fsm_description
-            payload = status.SerializeToString()
+            # Build Navigation protobuf
+            nav_msg = nav_pb.Navigation()
+            nav_msg.safety_states = self.current_fsm_state
 
+            payload = nav_msg.SerializeToString()
             if not payload:
                 return
 
@@ -148,21 +144,19 @@ class SafetyCommsNode(Node):
             frame = struct.pack(">I", len(payload)) + payload
             self.hmi_tx_sock.sendall(frame)
 
-            # Update last sent values
+            # Update last sent state
             self.last_sent_state = self.current_fsm_state
-            self.last_sent_description = self.current_fsm_description
 
             self.get_logger().info(
-                f'Sent SafetyStatus: state={self.current_fsm_state}, '
-                f'description="{self.current_fsm_description}"'
+                f'Sent Navigation: safety_states={self.current_fsm_state}'
             )
 
         except (socket.timeout, ConnectionRefusedError,
                 ConnectionResetError, BrokenPipeError) as e:
-            self.get_logger().warning(f'SafetyStatus TX failed, will retry: {e}')
+            self.get_logger().warning(f'Navigation TX failed, will retry: {e}')
             self._connect_hmi_tx()
         except Exception as e:
-            self.get_logger().error(f'SafetyStatus TX error: {e}')
+            self.get_logger().error(f'Navigation TX error: {e}')
 
     # --------------------------------------------------------------------------
     # TCP RX: HMI -> Intel (HMITxMessage) - Server mode
@@ -299,12 +293,12 @@ class SafetyCommsNode(Node):
     def cb_fsm_state(self, msg: Int32) -> None:
         """Handle FSM state update from safety node."""
         self.current_fsm_state = msg.data
-        self._send_safety_status()
+        self._send_navigation()
 
     def cb_fsm_description(self, msg: String) -> None:
         """Handle FSM description update from safety node."""
         self.current_fsm_description = msg.data
-        self._send_safety_status()
+        self._send_navigation()
 
     # --------------------------------------------------------------------------
     # Cleanup
