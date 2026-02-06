@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
 """
-intel2hmi_test.py - Test receiver for data_stream_node.py
+intel2hmi_test.py - Test receiver for Intel -> HMI messages
 
-Simulates HMI backend receiving Navigation and CameraBatch on port 5001.
-Handles type-prefixed messages:
-  - 0x01 = Navigation
-  - 0x02 = CameraBatch
+Simulates HMI backend receiving all Intel transmissions:
+  Port 5001 (data_stream_node):
+    - 0x01 = Navigation
+    - 0x02 = CameraBatch
+    Wire format: [4-byte length][1-byte type][payload]
 
-Wire format: [4-byte length][1-byte type][payload]
+  Port 5003 (safety_comms_node):
+    - SafetyStatus (state, description)
+    Wire format: [4-byte length][payload]
 """
 import socket
 import struct
 import time
+import threading
 from typing import Optional
 
 import cv2
@@ -19,6 +23,7 @@ import numpy as np
 
 import HMI_RX_CONTROLS_pb2 as hmi
 import CAMERA_pb2
+import SAFETY_STATUS_pb2 as safety_pb
 
 # Message type constants
 MSG_TYPE_NAVIGATION = 0x01
@@ -127,19 +132,80 @@ def handle_client(conn: socket.socket, addr):
         conn.close()
 
 
-def main():
+def handle_safety_client(conn: socket.socket, addr):
+    """Handle SafetyStatus messages from safety_comms_node (port 5003)."""
+    print(f"[safety connected] {addr[0]}:{addr[1]}")
+    msg_count = 0
+
+    try:
+        while True:
+            hdr = recv_exact(conn, 4)
+            if hdr is None:
+                print("\n[safety disconnect]")
+                return
+            (msg_len,) = struct.unpack(">I", hdr)
+            if msg_len == 0:
+                continue
+
+            payload = recv_exact(conn, msg_len)
+            if payload is None:
+                print("\n[safety disconnect mid-payload]")
+                return
+
+            msg_count += 1
+            try:
+                status = safety_pb.SafetyStatus()
+                status.ParseFromString(payload)
+                print(f"\n=== SafetyStatus #{msg_count} ===")
+                print(f"  state:       {status.state}")
+                print(f"  description: \"{status.description}\"")
+            except Exception as e:
+                print(f"\n[safety parse error] {e}")
+
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            conn.shutdown(socket.SHUT_RDWR)
+        except Exception:
+            pass
+        conn.close()
+
+
+def run_safety_listener():
+    """Listen for SafetyStatus on port 5003 in a background thread."""
     host = "0.0.0.0"
-    port = 5001
-    print(f"=== Intel→HMI Test Receiver (port {port}) ===")
-    print("Expecting type-prefixed messages:")
-    print("  0x01 = Navigation")
-    print("  0x02 = CameraBatch")
-    print(f"[listening] {host}:{port}")
-    print("Press 'q' in camera window or Ctrl+C to quit\n")
+    port = 5003
+    print(f"[safety listening] {host}:{port}")
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind((host, port))
+        s.listen(5)
+        while True:
+            try:
+                conn, addr = s.accept()
+                handle_safety_client(conn, addr)
+            except (KeyboardInterrupt, OSError):
+                break
+
+
+def main():
+    host = "0.0.0.0"
+    print("=== Intel→HMI Test Receiver ===")
+    print("  Port 5001: Navigation + CameraBatch (data_stream_node)")
+    print("  Port 5003: SafetyStatus (safety_comms_node)")
+    print("Press 'q' in camera window or Ctrl+C to quit\n")
+
+    # Start safety listener in background thread
+    safety_thread = threading.Thread(target=run_safety_listener, daemon=True)
+    safety_thread.start()
+
+    # Data stream listener on main thread
+    print(f"[data listening] {host}:5001")
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind((host, 5001))
         s.listen(5)
         while True:
             try:
